@@ -1,6 +1,8 @@
 from typing import List
 
 from products import Product
+from deal_score import calculate_deal_score
+
 from adapters.base import ShopAdapter
 
 from adapters.wildberries import WildberriesAdapter
@@ -16,6 +18,7 @@ from adapters.jd import JdAdapter
 class GlobalSearch:
 
     def __init__(self):
+
         self.adapters: List[ShopAdapter] = [
             WildberriesAdapter(),
             OzonAdapter(),
@@ -49,29 +52,43 @@ class GlobalSearch:
         for adapter in self.adapters:
 
             try:
+
                 products = adapter.search(query)
 
                 if products:
                     results.extend(products)
 
             except Exception as e:
+
                 print(
                     f"{adapter.shop_name} search error:",
                     e
                 )
 
-        return self.sort_by_price(results)
+        return self.rank_results(results)
 
-    def sort_by_price(
+    def rank_results(
         self,
         products: List[Product]
     ) -> List[Product]:
 
-        return sorted(
-            products,
-            key=lambda product: (
-                product.price
-                if product.price is not None
-                else float("inf")
+        scored_products = []
+
+        for product in products:
+
+            score = calculate_deal_score(product)
+
+            scored_products.append(
+                (score, product)
             )
+
+        scored_products.sort(
+            key=lambda item: item[0],
+            reverse=True
         )
+
+        return [
+            product
+            for score, product
+            in scored_products
+        ]
