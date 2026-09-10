@@ -1,0 +1,1 @@
+# Savvy Sense global store adapters
