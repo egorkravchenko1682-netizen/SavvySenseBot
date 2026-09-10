@@ -1,7 +1,6 @@
 import requests
 
 
-# Валюты, которые поддерживает SAVVY SENSE
 SUPPORTED_CURRENCIES = {
     "BYN",
     "RUB",
@@ -16,10 +15,6 @@ SUPPORTED_CURRENCIES = {
 
 
 def normalize_currency(currency: str | None) -> str | None:
-    """
-    Приводит разные обозначения валюты
-    к единому коду.
-    """
 
     if not currency:
         return None
@@ -88,10 +83,6 @@ def normalize_currency(currency: str | None) -> str | None:
 def get_exchange_rates(
     base_currency: str = "USD"
 ) -> dict:
-    """
-    Получает актуальные курсы валют
-    относительно базовой валюты.
-    """
 
     base_currency = normalize_currency(
         base_currency
@@ -100,18 +91,16 @@ def get_exchange_rates(
     if not base_currency:
         base_currency = "USD"
 
-    url = (
-        "https://api.frankfurter.app/latest"
-    )
-
-    params = {
-        "from": base_currency
-    }
-
+    # Первый источник
     try:
+
+        url = "https://api.frankfurter.app/latest"
+
         response = requests.get(
             url,
-            params=params,
+            params={
+                "from": base_currency
+            },
             timeout=10,
         )
 
@@ -126,18 +115,50 @@ def get_exchange_rates(
 
         rates[base_currency] = 1.0
 
-        return rates
+        if rates:
+            return rates
 
     except Exception as e:
 
         print(
-            "Currency API error:",
+            "Frankfurter currency error:",
             e
         )
 
-        return {
-            base_currency: 1.0
-        }
+    # Резервный источник
+    try:
+
+        url = "https://open.er-api.com/v6/latest/"
+
+        response = requests.get(
+            url + base_currency,
+            timeout=10,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        rates = data.get(
+            "rates",
+            {}
+        )
+
+        rates[base_currency] = 1.0
+
+        if rates:
+            return rates
+
+    except Exception as e:
+
+        print(
+            "ExchangeRate-API error:",
+            e
+        )
+
+    return {
+        base_currency: 1.0
+    }
 
 
 def convert_currency(
@@ -145,10 +166,6 @@ def convert_currency(
     from_currency: str,
     to_currency: str,
 ) -> float | None:
-    """
-    Конвертирует сумму из одной валюты
-    в другую.
-    """
 
     from_currency = normalize_currency(
         from_currency
@@ -173,6 +190,14 @@ def convert_currency(
     )
 
     if rate is None:
+
+        print(
+            "Currency rate not found:",
+            from_currency,
+            "->",
+            to_currency,
+        )
+
         return None
 
     return float(amount) * float(rate)
@@ -184,10 +209,6 @@ def is_within_budget(
     budget: float,
     budget_currency: str,
 ) -> bool:
-    """
-    Проверяет, находится ли товар
-    в пределах бюджета пользователя.
-    """
 
     converted_price = convert_currency(
         price,
@@ -206,10 +227,6 @@ def convert_to_budget_currency(
     price_currency: str,
     budget_currency: str,
 ) -> float | None:
-    """
-    Возвращает цену товара
-    в валюте бюджета пользователя.
-    """
 
     return convert_currency(
         price,
