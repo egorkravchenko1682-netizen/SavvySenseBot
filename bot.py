@@ -17,7 +17,7 @@ search_engine = GlobalSearch()
 
 
 # =========================
-# START
+# /start — ЗАПУСТИТЬ SAVVY SENSE
 # =========================
 
 @bot.message_handler(commands=["start"])
@@ -26,21 +26,261 @@ def start(message):
     bot.send_message(
         message.chat.id,
         "🧠 SAVVY SENSE\n\n"
-        "Твой AI-помощник для умных покупок.\n\n"
-        "🌎 Ищу товары по всему миру.\n\n"
-        "Отправь мне:\n"
-        "🔎 название или описание товара\n"
-        "🔗 ссылку на товар\n"
-        "📸 фотографию товара\n\n"
-        "Команды:\n"
-        "/search — поиск товара\n"
-        "/compare — сравнение\n"
-        "/help — помощь"
+        "Добро пожаловать в умный поиск товаров.\n\n"
+        "🌎 Я помогу найти товар, сравнить цены "
+        "и выбрать наиболее выгодное предложение.\n\n"
+        "Выбери действие:\n\n"
+        "🔎 /find — найти товар\n"
+        "⚖️ /compare — сравнить товары\n"
+        "🧠 /check — стоит ли покупать?\n"
+        "💰 /cheaper — найти дешевле\n"
+        "🔔 /track — отслеживать цену\n"
+        "ℹ️ /help — как это работает\n\n"
+        "Или просто отправь мне фото, ссылку "
+        "или описание товара."
     )
 
 
 # =========================
-# HELP
+# /find — НАЙТИ ТОВАР
+# =========================
+
+@bot.message_handler(commands=["find"])
+def find_command(message):
+
+    query = message.text.replace(
+        "/find",
+        "",
+        1
+    ).strip()
+
+    if query:
+
+        bot.send_message(
+            message.chat.id,
+            "🔎 НАЙТИ ТОВАР\n\n"
+            f"Ищу:\n{query}\n\n"
+            "🌎 Выполняю поиск..."
+        )
+
+        results = search_engine.search_everywhere(
+            query
+        )
+
+        if results:
+            send_results(
+                message.chat.id,
+                results
+            )
+        else:
+            bot.send_message(
+                message.chat.id,
+                "🔎 Пока не удалось найти "
+                "доступные предложения."
+            )
+
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "🔎 НАЙТИ ТОВАР\n\n"
+        "Напиши название или описание товара.\n\n"
+        "Например:\n"
+        "• iPhone 17 Pro 256GB\n"
+        "• чёрная кожаная куртка до $100\n"
+        "• Sony WH-1000XM6\n\n"
+        "Также можешь просто отправить 📸 фото "
+        "или 🔗 ссылку."
+    )
+
+
+# =========================
+# /compare — СРАВНИТЬ
+# =========================
+
+@bot.message_handler(commands=["compare"])
+def compare_command(message):
+
+    query = message.text.replace(
+        "/compare",
+        "",
+        1
+    ).strip()
+
+    if query:
+
+        bot.send_message(
+            message.chat.id,
+            "⚖️ СРАВНЕНИЕ\n\n"
+            f"Получил запрос:\n{query}\n\n"
+            "🔎 Ищу доступные варианты для сравнения..."
+        )
+
+        results = search_engine.search_everywhere(
+            query
+        )
+
+        if results:
+            send_results(
+                message.chat.id,
+                results
+            )
+        else:
+            bot.send_message(
+                message.chat.id,
+                "⚖️ Пока недостаточно доступных "
+                "предложений для сравнения."
+            )
+
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "⚖️ СРАВНИТЬ ТОВАРЫ\n\n"
+        "Отправь ссылку или напиши товары, "
+        "которые хочешь сравнить.\n\n"
+        "Например:\n"
+        "/compare iPhone 17 Pro\n\n"
+        "Я сравню доступные предложения."
+    )
+
+
+# =========================
+# /check — СТОИТ ЛИ ПОКУПАТЬ
+# =========================
+
+@bot.message_handler(commands=["check"])
+def check_command(message):
+
+    query = message.text.replace(
+        "/check",
+        "",
+        1
+    ).strip()
+
+    if query:
+
+        bot.send_message(
+            message.chat.id,
+            "🧠 ПРОВЕРКА ТОВАРА\n\n"
+            f"Товар:\n{query}\n\n"
+            "🔎 Анализирую доступную информацию..."
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "📊 Анализ будет включать:\n\n"
+            "💰 цену\n"
+            "⭐ рейтинг\n"
+            "💬 отзывы\n"
+            "🏪 продавца\n"
+            "📦 предложение\n"
+            "⚖️ соотношение цены и качества\n\n"
+            "После подключения источников "
+            "я смогу сформировать итоговую "
+            "рекомендацию «Стоит покупать»."
+        )
+
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "🧠 СТОИТ ЛИ ПОКУПАТЬ?\n\n"
+        "Отправь ссылку на товар или его название.\n\n"
+        "Например:\n"
+        "/check iPhone 17 Pro\n\n"
+        "Я проверю товар и оценю его выгоду."
+    )
+
+
+# =========================
+# /cheaper — НАЙТИ ДЕШЕВЛЕ
+# =========================
+
+@bot.message_handler(commands=["cheaper"])
+def cheaper_command(message):
+
+    query = message.text.replace(
+        "/cheaper",
+        "",
+        1
+    ).strip()
+
+    if query:
+
+        bot.send_message(
+            message.chat.id,
+            "💰 ИЩУ ДЕШЕВЛЕ\n\n"
+            f"Товар:\n{query}\n\n"
+            "🌎 Ищу более выгодные предложения..."
+        )
+
+        results = search_engine.search_everywhere(
+            query
+        )
+
+        if results:
+            send_results(
+                message.chat.id,
+                results
+            )
+        else:
+            bot.send_message(
+                message.chat.id,
+                "💰 Пока не удалось найти "
+                "доступные более дешёвые варианты."
+            )
+
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "💰 НАЙТИ ДЕШЕВЛЕ\n\n"
+        "Отправь ссылку или название товара.\n\n"
+        "Например:\n"
+        "/cheaper AirPods Pro 3\n\n"
+        "Я попробую найти более выгодные варианты."
+    )
+
+
+# =========================
+# /track — ОТСЛЕЖИВАНИЕ ЦЕНЫ
+# =========================
+
+@bot.message_handler(commands=["track"])
+def track_command(message):
+
+    query = message.text.replace(
+        "/track",
+        "",
+        1
+    ).strip()
+
+    if query:
+
+        bot.send_message(
+            message.chat.id,
+            "🔔 ОТСЛЕЖИВАНИЕ ЦЕНЫ\n\n"
+            f"Товар:\n{query}\n\n"
+            "Функция отслеживания будет сохранять "
+            "товар и уведомлять при изменении цены."
+        )
+
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "🔔 ОТСЛЕЖИВАНИЕ ЦЕНЫ\n\n"
+        "Отправь ссылку или название товара.\n\n"
+        "Например:\n"
+        "/track iPhone 17 Pro\n\n"
+        "После подключения системы уведомлений "
+        "я смогу сообщать об изменении цены."
+    )
+
+
+# =========================
+# /help — КАК ЭТО РАБОТАЕТ
 # =========================
 
 @bot.message_handler(commands=["help"])
@@ -48,59 +288,30 @@ def help_command(message):
 
     bot.send_message(
         message.chat.id,
-        "🧠 SAVVY SENSE — возможности\n\n"
-        "🔎 Поиск товара\n"
-        "Просто напиши, что ищешь.\n\n"
-        "🔗 Поиск по ссылке\n"
-        "Отправь ссылку на товар.\n\n"
-        "📸 Поиск по фото\n"
+        "ℹ️ КАК РАБОТАЕТ SAVVY SENSE\n\n"
+        "🔎 /find\n"
+        "Найти нужный товар.\n\n"
+        "⚖️ /compare\n"
+        "Сравнить доступные предложения.\n\n"
+        "🧠 /check\n"
+        "Проверить товар и понять, стоит ли его покупать.\n\n"
+        "💰 /cheaper\n"
+        "Попробовать найти более выгодную цену.\n\n"
+        "🔔 /track\n"
+        "Отслеживать изменение цены.\n\n"
+        "📸 Фото\n"
         "Отправь фотографию товара.\n\n"
-        "⚖️ Сравнение\n"
-        "/compare\n\n"
-        "🌎 Глобальный поиск\n"
-        "Ищем лучшие варианты среди доступных источников."
+        "🔗 Ссылка\n"
+        "Отправь ссылку на товар.\n\n"
+        "✍️ Текст\n"
+        "Просто напиши, что хочешь купить.\n\n"
+        "🌎 SAVVY SENSE автоматически определит "
+        "тип запроса."
     )
 
 
 # =========================
-# COMPARE
-# =========================
-
-@bot.message_handler(commands=["compare"])
-def compare_command(message):
-
-    bot.send_message(
-        message.chat.id,
-        "⚖️ Режим сравнения включён.\n\n"
-        "Отправь мне:\n"
-        "🔗 ссылку на товар\n"
-        "или\n"
-        "📸 фотографию товара\n"
-        "или\n"
-        "🔎 название товара.\n\n"
-        "Я подготовлю сравнение доступных предложений."
-    )
-
-
-# =========================
-# SEARCH COMMAND
-# =========================
-
-@bot.message_handler(commands=["search"])
-def search_command(message):
-
-    bot.send_message(
-        message.chat.id,
-        "🔎 Напиши, какой товар нужно найти.\n\n"
-        "Например:\n"
-        "iPhone 17 Pro 256GB\n"
-        "чёрная кожаная куртка до $100\n"
-        "беспроводные наушники Sony"
-    )
-
-
-# =========================
-# GREETINGS
+# ПРИВЕТСТВИЯ
 # =========================
 
 def is_greeting(text):
@@ -120,7 +331,7 @@ def is_greeting(text):
 
 
 # =========================
-# TEXT
+# ОБЫЧНЫЙ ТЕКСТОВЫЙ ПОИСК
 # =========================
 
 @bot.message_handler(content_types=["text"])
@@ -138,13 +349,11 @@ def handle_text(message):
             "👋 Привет!\n\n"
             "Я SAVVY SENSE — AI-помощник "
             "для умных покупок.\n\n"
-            "🌎 Просто отправь мне товар, "
+            "Просто отправь мне товар, "
             "ссылку или фотографию."
         )
 
         return
-
-    # Проверяем ссылку
 
     urls = re.findall(
         r"https?://[^\s]+",
@@ -170,8 +379,8 @@ def handle_text(message):
                 message.chat.id,
                 "⚠️ Пока не удалось получить данные "
                 "из этого магазина.\n\n"
-                "Мы подключим дополнительные "
-                "источники поиска."
+                "Мы подключаем дополнительные "
+                "источники."
             )
 
             return
@@ -203,8 +412,6 @@ def handle_text(message):
 
         return
 
-    # Обычный поисковый запрос
-
     bot.send_message(
         message.chat.id,
         "🌎 Ищу товар по всему миру...\n\n"
@@ -219,9 +426,7 @@ def handle_text(message):
 
         bot.send_message(
             message.chat.id,
-            "🔎 Пока нет доступных результатов.\n\n"
-            "Мы подключаем реальные источники "
-            "товаров."
+            "🔎 Пока нет доступных результатов."
         )
 
         return
@@ -233,7 +438,7 @@ def handle_text(message):
 
 
 # =========================
-# RESULTS
+# РЕЗУЛЬТАТЫ
 # =========================
 
 def send_results(chat_id, results):
@@ -269,7 +474,7 @@ def send_results(chat_id, results):
 
 
 # =========================
-# PHOTO
+# ФОТО
 # =========================
 
 @bot.message_handler(content_types=["photo"])
@@ -284,7 +489,7 @@ def handle_photo(message):
 
 
 # =========================
-# START BOT
+# ЗАПУСК
 # =========================
 
 print("SAVVY SENSE started")
