@@ -84,7 +84,6 @@ class WebSearchAdapter(ShopAdapter):
                 if not title or not link:
                     continue
 
-                # Раскрываем redirect DuckDuckGo
                 if "uddg=" in link:
 
                     match = re.search(
@@ -103,11 +102,25 @@ class WebSearchAdapter(ShopAdapter):
                 ):
                     continue
 
-                shop = self.detect_shop(link)
+                shop = self.detect_shop(
+                    link
+                )
 
                 price, currency = self.extract_price(
                     title
                 )
+
+                # Если цены нет в заголовке,
+                # пробуем открыть страницу товара.
+                if price is None:
+
+                    page_price, page_currency = (
+                        self.get_page_price(link)
+                    )
+
+                    if page_price is not None:
+                        price = page_price
+                        currency = page_currency
 
                 results.append(
                     Product(
@@ -125,7 +138,7 @@ class WebSearchAdapter(ShopAdapter):
 
             print(
                 f"Web search: found {len(results)} "
-                f"product results for '{query}'"
+                f"results for '{query}'"
             )
 
             return results
@@ -139,6 +152,191 @@ class WebSearchAdapter(ShopAdapter):
 
             return []
 
+    def get_page_price(
+        self,
+        url: str,
+    ):
+
+        try:
+
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(iPhone; CPU iPhone OS 18_7 like Mac OS X) "
+                    "AppleWebKit/605.1.15 "
+                    "(KHTML, like Gecko) "
+                    "Version/18.0 Mobile/15E148 Safari/604.1"
+                ),
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+            }
+
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=10,
+                allow_redirects=True,
+            )
+
+            if response.status_code != 200:
+                return None, None
+
+            html = response.text
+
+            # 1. JSON-LD
+            price = self.extract_json_price(
+                html
+            )
+
+            if price:
+                return price
+
+            # 2. Meta / HTML
+            price = self.extract_html_price(
+                html
+            )
+
+            if price:
+                return price
+
+            # 3. Обычный текст страницы
+            text = re.sub(
+                r"<script.*?</script>",
+                " ",
+                html,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+
+            text = re.sub(
+                r"<style.*?</style>",
+                " ",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+
+            text = re.sub(
+                r"<.*?>",
+                " ",
+                text,
+            )
+
+            text = unescape(
+                text
+            )
+
+            price = self.extract_price(
+                text
+            )
+
+            if price:
+                return price
+
+        except Exception as e:
+
+            print(
+                "Page price error:",
+                e,
+            )
+
+        return None, None
+
+    def extract_json_price(
+        self,
+        html: str,
+    ):
+
+        patterns = [
+
+            r'"price"\s*:\s*"([\d\s.,]+)"',
+
+            r'"price"\s*:\s*([\d.]+)',
+
+            r'"lowPrice"\s*:\s*"([\d\s.,]+)"',
+
+            r'"lowPrice"\s*:\s*([\d.]+)',
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                html,
+                re.IGNORECASE,
+            )
+
+            if not match:
+                continue
+
+            try:
+
+                value = (
+                    match.group(1)
+                    .replace(" ", "")
+                    .replace(",", ".")
+                )
+
+                price = float(value)
+
+                if 0 < price < 100000000:
+                    currency = self.detect_currency(
+                        html
+                    )
+
+                    return price, currency
+
+            except Exception:
+                continue
+
+        return None
+
+    def extract_html_price(
+        self,
+        html: str,
+    ):
+
+        patterns = [
+
+            r'itemprop=["\']price["\'][^>]*content=["\']([\d.,]+)',
+
+            r'content=["\']([\d.,]+)["\'][^>]*itemprop=["\']price',
+
+            r'meta[^>]+property=["\']product:price:amount["\'][^>]+content=["\']([\d.,]+)',
+
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                html,
+                re.IGNORECASE,
+            )
+
+            if not match:
+                continue
+
+            try:
+
+                value = (
+                    match.group(1)
+                    .replace(",", ".")
+                )
+
+                price = float(value)
+
+                if 0 < price < 100000000:
+
+                    currency = self.detect_currency(
+                        html
+                    )
+
+                    return price, currency
+
+            except Exception:
+                continue
+
+        return None
+
     def is_product_result(
         self,
         title: str,
@@ -149,8 +347,6 @@ class WebSearchAdapter(ShopAdapter):
             title + " " + url
         ).lower()
 
-        # Страницы, которые почти всегда
-        # являются категориями или статьями.
         blocked_words = [
             "/category/",
             "/categories/",
@@ -158,9 +354,6 @@ class WebSearchAdapter(ShopAdapter):
             "/article/",
             "/news/",
             "/search?",
-            "/catalog/",
-            "купить на ozon",
-            "купить на wildberries",
             "каталог",
             "категория",
             "лучшие ",
@@ -168,7 +361,6 @@ class WebSearchAdapter(ShopAdapter):
             "обзор",
             "рейтинг",
             "как выбрать",
-            "гид по покупке",
         ]
 
         for word in blocked_words:
@@ -176,8 +368,6 @@ class WebSearchAdapter(ShopAdapter):
             if word in text:
                 return False
 
-        # Нужен хотя бы один признак,
-        # что страница может быть товарной.
         product_words = [
             "купить",
             "цена",
@@ -191,8 +381,6 @@ class WebSearchAdapter(ShopAdapter):
             "€",
             "товар",
             "product",
-            "shop",
-            "store",
             "iphone",
             "samsung",
             "sony",
@@ -209,8 +397,6 @@ class WebSearchAdapter(ShopAdapter):
             if word in text:
                 return True
 
-        # Некоторые маркетплейсы используют
-        # товарные URL без слов "купить".
         shop_domains = [
             "wildberries.",
             "ozon.",
@@ -238,25 +424,18 @@ class WebSearchAdapter(ShopAdapter):
 
         patterns = [
 
-            # 1 299 ₽
             r"(\d[\d\s.,]*)\s*(₽|руб\.?|RUB)",
 
-            # $299
             r"(\$)\s*(\d[\d\s.,]*)",
 
-            # 299 $
             r"(\d[\d\s.,]*)\s*(\$|USD)",
 
-            # 299 €
             r"(\d[\d\s.,]*)\s*(€|EUR)",
 
-            # 299 BYN
             r"(\d[\d\s.,]*)\s*(BYN|Br)",
 
-            # 299 грн
             r"(\d[\d\s.,]*)\s*(грн|UAH)",
 
-            # 299 ₸
             r"(\d[\d\s.,]*)\s*(₸|KZT)",
         ]
 
@@ -271,13 +450,11 @@ class WebSearchAdapter(ShopAdapter):
             if not match:
                 continue
 
-            groups = match.groups()
-
             try:
 
                 numbers = [
                     item
-                    for item in groups
+                    for item in match.groups()
                     if re.search(
                         r"\d",
                         item,
@@ -301,7 +478,8 @@ class WebSearchAdapter(ShopAdapter):
                     text
                 )
 
-                return price, currency
+                if 0 < price < 100000000:
+                    return price, currency
 
             except Exception:
                 continue
