@@ -11,7 +11,6 @@ from adapters.ebay import EbayAdapter
 from adapters.temu import TemuAdapter
 from adapters.taobao import TaobaoAdapter
 from adapters.jd import JdAdapter
-from adapters.1688 import Adapter1688
 
 
 class GlobalSearch:
@@ -26,7 +25,6 @@ class GlobalSearch:
             TemuAdapter(),
             TaobaoAdapter(),
             JdAdapter(),
-            Adapter1688(),
         ]
 
     def get_product_from_link(
