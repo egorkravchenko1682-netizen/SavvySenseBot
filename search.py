@@ -13,6 +13,7 @@ from adapters.ebay import EbayAdapter
 from adapters.temu import TemuAdapter
 from adapters.taobao import TaobaoAdapter
 from adapters.jd import JdAdapter
+from adapters.walmart import WalmartAdapter
 
 
 class GlobalSearch:
@@ -28,6 +29,7 @@ class GlobalSearch:
             TemuAdapter(),
             TaobaoAdapter(),
             JdAdapter(),
+            WalmartAdapter(),
         ]
 
     def get_product_from_link(
@@ -37,8 +39,17 @@ class GlobalSearch:
 
         for adapter in self.adapters:
 
-            if adapter.can_handle(url):
-                return adapter.get_product(url)
+            try:
+
+                if adapter.can_handle(url):
+                    return adapter.get_product(url)
+
+            except Exception as e:
+
+                print(
+                    f"{adapter.shop_name} link error:",
+                    e
+                )
 
         return None
 
@@ -76,7 +87,9 @@ class GlobalSearch:
 
         for product in products:
 
-            score = calculate_deal_score(product)
+            score = calculate_deal_score(
+                product
+            )
 
             scored_products.append(
                 (score, product)
