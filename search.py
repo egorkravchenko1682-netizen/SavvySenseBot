@@ -14,6 +14,7 @@ from adapters.temu import TemuAdapter
 from adapters.taobao import TaobaoAdapter
 from adapters.jd import JdAdapter
 from adapters.walmart import WalmartAdapter
+from adapters.web_search import WebSearchAdapter
 
 
 class GlobalSearch:
@@ -30,6 +31,7 @@ class GlobalSearch:
             TaobaoAdapter(),
             JdAdapter(),
             WalmartAdapter(),
+            WebSearchAdapter(),
         ]
 
     def get_product_from_link(
