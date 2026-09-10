@@ -1,49 +1,19 @@
 import os
 import re
-import requests
+
 import telebot
+
+from search import GlobalSearch
+
 
 TOKEN = os.getenv("BOT_TOKEN")
 
+if not TOKEN:
+    raise RuntimeError("BOT_TOKEN не найден")
+
 bot = telebot.TeleBot(TOKEN)
 
-
-def get_wb_product(nm_id):
-    url = "https://card.wb.ru/cards/v4/detail"
-
-    params = {
-        "appType": 1,
-        "curr": "rub",
-        "dest": -1257786,
-        "lang": "ru",
-        "nm": nm_id
-    }
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
-
-    response = requests.get(
-        url,
-        params=params,
-        headers=headers,
-        timeout=15
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    products = data.get("products", [])
-
-    if not products:
-        products = data.get("data", {}).get("products", [])
-
-    if not products:
-        return None
-
-    return products[0]
+search_engine = GlobalSearch()
 
 
 @bot.message_handler(commands=["start"])
@@ -52,98 +22,171 @@ def start(message):
         message.chat.id,
         "🧠 SAVVY SENSE\n\n"
         "Твой AI-помощник для умных покупок.\n\n"
-        "🔗 Отправь ссылку на товар Wildberries."
+        "🌎 Я ищу товары по всему миру.\n\n"
+        "Отправь мне:\n"
+        "🔗 ссылку на товар\n"
+        "🔎 название или описание товара\n"
+        "📸 фотографию товара\n\n"
+        "Я постараюсь найти лучший вариант по цене и условиям."
     )
 
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    text = message.text or ""
+@bot.message_handler(
+    content_types=["text"]
+)
+def handle_text(message):
 
-    urls = re.findall(r"https?://[^\s]+", text)
+    text = (message.text or "").strip()
 
-    if not urls:
-        bot.send_message(
-            message.chat.id,
-            "🔗 Отправь ссылку на товар Wildberries."
-        )
+    if not text:
         return
 
-    url = urls[0]
-
-    match = re.search(
-        r"/catalog/(\d+)/detail",
-        url
+    urls = re.findall(
+        r"https?://[^\s]+",
+        text
     )
 
-    if not match:
+    if urls:
+
+        url = urls[0]
+
         bot.send_message(
             message.chat.id,
-            "❌ Не удалось определить артикул Wildberries."
+            "🌎 Анализирую товар и готовлю глобальный поиск..."
         )
-        return
 
-    nm_id = match.group(1)
+        product = search_engine.get_product_from_link(url)
+
+        if product:
+
+            name = product.name
+            shop = product.shop
+            price = product.price
+            currency = product.currency
+
+            price_text = (
+                f"{price:.2f} {currency}"
+                if price is not None
+                else "цена не определена"
+            )
+
+            bot.send_message(
+                message.chat.id,
+                "📦 ТОВАР ОПРЕДЕЛЁН\n\n"
+                f"Название: {name}\n"
+                f"Магазин: {shop}\n"
+                f"Цена: {price_text}\n\n"
+                "🌎 Теперь ищем этот товар "
+                "и его аналоги по всему миру."
+            )
+
+            results = search_engine.search_everywhere(
+                name
+            )
+
+            if results:
+
+                lines = [
+                    "\n💰 НАЙДЕННЫЕ ВАРИАНТЫ:\n"
+                ]
+
+                for item in results[:10]:
+
+                    item_price = (
+                        f"{item.price:.2f} "
+                        f"{item.currency}"
+                        if item.price is not None
+                        else "цена не указана"
+                    )
+
+                    lines.append(
+                        f"• {item.shop}: "
+                        f"{item_price}"
+                    )
+
+                bot.send_message(
+                    message.chat.id,
+                    "\n".join(lines)
+                )
+
+            else:
+
+                bot.send_message(
+                    message.chat.id,
+                    "🔎 Пока не удалось получить "
+                    "результаты глобального сравнения."
+                )
+
+        else:
+
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Пока я не могу получить данные "
+                "из этого магазина.\n\n"
+                "Но магазин можно подключить "
+                "к глобальному поиску."
+            )
+
+        return
 
     bot.send_message(
         message.chat.id,
-        "🔎 Получаю информацию о товаре..."
+        "🔎 Ищу товар по всему миру...\n\n"
+        f"Запрос: {text}"
     )
 
-    try:
-        product = get_wb_product(nm_id)
+    results = search_engine.search_everywhere(text)
 
-        if not product:
-            bot.send_message(
-                message.chat.id,
-                "❌ Товар не найден."
-            )
-            return
-
-        name = product.get("name", "Не указано")
-        brand = product.get("brand", "Не указан")
-        rating = product.get("reviewRating", "Нет данных")
-        reviews = product.get("feedbacks", "Нет данных")
-
-        price = "Нет данных"
-
-        sizes = product.get("sizes", [])
-
-        if sizes:
-            price_data = sizes[0].get("price", {})
-
-            if "product" in price_data:
-                price = price_data["product"]
-
-                try:
-                    price = f"{price / 100:.2f} ₽"
-                except:
-                    pass
-
-        result = (
-            "🛍️ ТОВАР НАЙДЕН\n\n"
-            f"📦 {name}\n"
-            f"🏷 Бренд: {brand}\n"
-            f"💰 Цена: {price}\n"
-            f"⭐ Рейтинг: {rating}\n"
-            f"💬 Отзывов: {reviews}\n\n"
-            f"🔢 Артикул: {nm_id}\n\n"
-            "🔎 Следующий этап — поиск похожих товаров."
-        )
+    if not results:
 
         bot.send_message(
             message.chat.id,
-            result
+            "Пока не найдено доступных предложений."
         )
 
-    except Exception as e:
-        print("Wildberries error:", e)
+        return
 
-        bot.send_message(
-            message.chat.id,
-            "⚠️ Не удалось получить данные Wildberries.\n"
-            "Попробуем ещё раз позже."
+    lines = [
+        "🌎 РЕЗУЛЬТАТЫ ГЛОБАЛЬНОГО ПОИСКА\n"
+    ]
+
+    for item in results[:10]:
+
+        item_price = (
+            f"{item.price:.2f} {item.currency}"
+            if item.price is not None
+            else "цена не указана"
         )
 
+        lines.append(
+            f"🛍 {item.shop}\n"
+            f"📦 {item.name}\n"
+            f"💰 {item_price}\n"
+            f"🔗 {item.url}\n"
+        )
 
-bot.infinity_polling()
+    bot.send_message(
+        message.chat.id,
+        "\n".join(lines)
+    )
+
+
+@bot.message_handler(
+    content_types=["photo"]
+)
+def handle_photo(message):
+
+    bot.send_message(
+        message.chat.id,
+        "📸 Фото получено.\n\n"
+        "В следующем этапе подключим "
+        "AI-анализ изображения и поиск "
+        "похожих товаров по всему миру."
+    )
+
+
+print("SAVVY SENSE started")
+
+bot.infinity_polling(
+    skip_pending=True
+)
