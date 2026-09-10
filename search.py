@@ -17,6 +17,11 @@ from adapters.jd import JdAdapter
 from adapters.walmart import WalmartAdapter
 from adapters.web_search import WebSearchAdapter
 
+from currency import (
+    normalize_currency,
+    convert_to_budget_currency,
+)
+
 
 class SearchQuery:
 
@@ -28,7 +33,7 @@ class SearchQuery:
     ):
         self.query = query
         self.max_price = max_price
-        self.currency = currency
+        self.currency = normalize_currency(currency)
 
 
 class GlobalSearch:
@@ -48,10 +53,6 @@ class GlobalSearch:
             WebSearchAdapter(),
         ]
 
-    # =========================================================
-    # РАЗБОР ЗАПРОСА
-    # =========================================================
-
     def parse_query(self, text: str) -> SearchQuery:
 
         original = text.strip()
@@ -59,20 +60,15 @@ class GlobalSearch:
         max_price = None
         currency = None
 
-        # -----------------------------------------------------
-        # Ищем бюджет
-        # -----------------------------------------------------
-
         price_patterns = [
 
-            # до 100р / до 100 р
+            # BYN
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*р\b",
                 "BYN",
             ),
 
-            # до 100 рублей
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*"
@@ -80,28 +76,25 @@ class GlobalSearch:
                 "BYN",
             ),
 
-            # до 100 BYN
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*BYN\b",
                 "BYN",
             ),
 
-            # до 800$
+            # USD
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*\$",
                 "USD",
             ),
 
-            # до $800
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*\$\s*([\d\s.,]+)",
                 "USD",
             ),
 
-            # до 800 USD / долларов
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*"
@@ -109,21 +102,19 @@ class GlobalSearch:
                 "USD",
             ),
 
-            # до 800€
+            # EUR
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*€",
                 "EUR",
             ),
 
-            # до €800
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*€\s*([\d\s.,]+)",
                 "EUR",
             ),
 
-            # до 800 EUR / евро
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*"
@@ -131,29 +122,27 @@ class GlobalSearch:
                 "EUR",
             ),
 
-            # до 50000 ₽
+            # RUB
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*₽",
                 "RUB",
             ),
 
-            # до 50000 рублей
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*"
-                r"(?:руб(?:лей|ля)?|российских\s+рублей)\b",
+                r"(?:российских\s+рублей)\b",
                 "RUB",
             ),
 
-            # до 50000 RUB
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*RUB\b",
                 "RUB",
             ),
 
-            # до 2000 PLN / злотых
+            # PLN
             (
                 r"(?:до|не\s+дороже|максимум|не\s+более)"
                 r"\s*([\d\s.,]+)\s*"
@@ -170,38 +159,31 @@ class GlobalSearch:
                 flags=re.IGNORECASE,
             )
 
-            if match:
+            if not match:
+                continue
 
-                raw_price = match.group(1)
+            raw_price = match.group(1)
 
-                raw_price = (
-                    raw_price
-                    .replace(" ", "")
-                    .replace(",", ".")
-                )
+            raw_price = (
+                raw_price
+                .replace(" ", "")
+                .replace(",", ".")
+            )
 
-                try:
+            try:
 
-                    max_price = float(
-                        raw_price
-                    )
+                max_price = float(raw_price)
+                currency = detected_currency
 
-                    currency = detected_currency
+                break
 
-                    break
+            except ValueError:
 
-                except ValueError:
-
-                    pass
-
-        # =====================================================
-        # ОЧИСТКА ЗАПРОСА
-        # =====================================================
+                pass
 
         cleaned = original
 
         cleanup_patterns = [
-
             r"\bмне\s+нужен\b",
             r"\bмне\s+нужна\b",
             r"\bмне\s+нужно\b",
@@ -229,22 +211,15 @@ class GlobalSearch:
                 flags=re.IGNORECASE,
             )
 
-        # -----------------------------------------------------
-        # Удаляем ограничение цены из поискового запроса
-        # -----------------------------------------------------
-
         budget_patterns = [
 
-            # до $800 / до €800
             r"(?:до|не\s+дороже|максимум|не\s+более)"
             r"\s*[\$€]\s*[\d\s.,]+",
 
-            # до 800$ / до 800€ / до 800р
             r"(?:до|не\s+дороже|максимум|не\s+более)"
             r"\s*[\d\s.,]+\s*"
             r"(?:\$|€|₽|р\b)",
 
-            # до 800 BYN / USD / EUR / RUB
             r"(?:до|не\s+дороже|максимум|не\s+более)"
             r"\s*[\d\s.,]+\s*"
             r"(?:BYN|USD|EUR|RUB|PLN|"
@@ -276,10 +251,6 @@ class GlobalSearch:
             currency=currency,
         )
 
-    # =========================================================
-    # ТОВАР ПО ССЫЛКЕ
-    # =========================================================
-
     def get_product_from_link(
         self,
         url: str
@@ -294,7 +265,6 @@ class GlobalSearch:
                     product = adapter.get_product(url)
 
                     if product:
-
                         product.is_exact_match = True
 
                     return product
@@ -303,23 +273,17 @@ class GlobalSearch:
 
                 print(
                     f"{adapter.shop_name} link error:",
-                    e
+                    e,
                 )
 
         return None
-
-    # =========================================================
-    # ГЛОБАЛЬНЫЙ ПОИСК
-    # =========================================================
 
     def search_everywhere(
         self,
         query: str
     ) -> List[Product]:
 
-        parsed = self.parse_query(
-            query
-        )
+        parsed = self.parse_query(query)
 
         print(
             "SAVVY QUERY:",
@@ -341,16 +305,13 @@ class GlobalSearch:
                 )
 
                 if products:
-
-                    results.extend(
-                        products
-                    )
+                    results.extend(products)
 
             except Exception as e:
 
                 print(
                     f"{adapter.shop_name} search error:",
-                    e
+                    e,
                 )
 
         results = self.remove_bad_results(
@@ -359,17 +320,13 @@ class GlobalSearch:
         )
 
         results = self.remove_duplicates(
-            results
+            results,
         )
 
         return self.rank_results(
             results,
             parsed,
         )
-
-    # =========================================================
-    # ФИЛЬТРАЦИЯ МУСОРА
-    # =========================================================
 
     def remove_bad_results(
         self,
@@ -404,26 +361,46 @@ class GlobalSearch:
             ):
                 continue
 
-            # -------------------------------------------------
-            # Проверяем бюджет
-            # -------------------------------------------------
-
+            # Если есть бюджет —
+            # проверяем его независимо от валюты товара.
             if (
                 parsed.max_price is not None
+                and parsed.currency
                 and product.price is not None
                 and product.currency
-                and parsed.currency
-                and product.currency.upper()
-                == parsed.currency.upper()
             ):
 
-                if product.price > parsed.max_price:
+                converted_price = convert_to_budget_currency(
+                    product.price,
+                    product.currency,
+                    parsed.currency,
+                )
 
+                if converted_price is None:
+
+                    print(
+                        "Currency conversion failed:",
+                        product.price,
+                        product.currency,
+                        "->",
+                        parsed.currency,
+                    )
+
+                    # Не утверждаем, что товар
+                    # находится в бюджете.
                     continue
 
-            # -------------------------------------------------
-            # Проверяем подозрительную цену
-            # -------------------------------------------------
+                print(
+                    "PRICE:",
+                    product.price,
+                    product.currency,
+                    "=>",
+                    round(converted_price, 2),
+                    parsed.currency,
+                )
+
+                if converted_price > parsed.max_price:
+                    continue
 
             if product.price is not None:
 
@@ -459,15 +436,9 @@ class GlobalSearch:
                 if product.price > 50000000:
                     continue
 
-            clean_results.append(
-                product
-            )
+            clean_results.append(product)
 
         return clean_results
-
-    # =========================================================
-    # ДУБЛИКАТЫ
-    # =========================================================
 
     def remove_duplicates(
         self,
@@ -475,7 +446,6 @@ class GlobalSearch:
     ) -> List[Product]:
 
         unique = []
-
         seen = set()
 
         for product in products:
@@ -484,6 +454,7 @@ class GlobalSearch:
                 product.shop.lower(),
                 product.name.lower().strip(),
                 product.price,
+                product.currency,
             )
 
             if key in seen:
@@ -491,15 +462,9 @@ class GlobalSearch:
 
             seen.add(key)
 
-            unique.append(
-                product
-            )
+            unique.append(product)
 
         return unique
-
-    # =========================================================
-    # SAVVY SCORE
-    # =========================================================
 
     def rank_results(
         self,
@@ -521,50 +486,54 @@ class GlobalSearch:
             if product.is_exact_match:
                 score += 10
 
-            # -------------------------------------------------
-            # Цена относительно бюджета
-            # -------------------------------------------------
-
+            # Оцениваем близость к бюджету
+            # уже после конвертации валюты.
             if (
                 parsed
                 and parsed.max_price
                 and product.price
                 and product.currency
                 and parsed.currency
-                and product.currency.upper()
-                == parsed.currency.upper()
             ):
 
-                percentage = (
-                    product.price
-                    / parsed.max_price
+                converted_price = convert_to_budget_currency(
+                    product.price,
+                    product.currency,
+                    parsed.currency,
                 )
 
-                if percentage <= 0.50:
-                    score += 15
+                if converted_price is not None:
 
-                elif percentage <= 0.70:
-                    score += 10
+                    percentage = (
+                        converted_price
+                        / parsed.max_price
+                    )
 
-                elif percentage <= 0.85:
-                    score += 5
+                    if percentage <= 0.50:
+                        score += 15
+
+                    elif percentage <= 0.70:
+                        score += 10
+
+                    elif percentage <= 0.85:
+                        score += 5
 
             score = min(
                 score,
-                100
+                100,
             )
 
             scored_products.append(
                 (
                     score,
-                    product
+                    product,
                 )
             )
 
         scored_products.sort(
             key=lambda item: (
                 item[0],
-                -(item[1].price or 999999999)
+                -(item[1].price or 999999999),
             ),
             reverse=True,
         )
