@@ -110,17 +110,28 @@ class WebSearchAdapter(ShopAdapter):
                     title
                 )
 
-                # Если цены нет в заголовке,
-                # пробуем открыть страницу товара.
                 if price is None:
 
                     page_price, page_currency = (
-                        self.get_page_price(link)
+                        self.get_page_price(
+                            link,
+                            query,
+                        )
                     )
 
                     if page_price is not None:
+
                         price = page_price
                         currency = page_currency
+
+                # Дополнительная проверка цены.
+                if not self.is_reasonable_price(
+                    price,
+                    title,
+                    query,
+                ):
+                    price = None
+                    currency = None
 
                 results.append(
                     Product(
@@ -155,6 +166,7 @@ class WebSearchAdapter(ShopAdapter):
     def get_page_price(
         self,
         url: str,
+        query: str,
     ):
 
         try:
@@ -183,23 +195,33 @@ class WebSearchAdapter(ShopAdapter):
 
             html = response.text
 
-            # 1. JSON-LD
+            # JSON-LD
             price = self.extract_json_price(
                 html
             )
 
             if price:
-                return price
+                if self.is_reasonable_price(
+                    price[0],
+                    "",
+                    query,
+                ):
+                    return price
 
-            # 2. Meta / HTML
+            # HTML metadata
             price = self.extract_html_price(
                 html
             )
 
             if price:
-                return price
+                if self.is_reasonable_price(
+                    price[0],
+                    "",
+                    query,
+                ):
+                    return price
 
-            # 3. Обычный текст страницы
+            # Обычный текст страницы.
             text = re.sub(
                 r"<script.*?</script>",
                 " ",
@@ -229,7 +251,13 @@ class WebSearchAdapter(ShopAdapter):
             )
 
             if price:
-                return price
+
+                if self.is_reasonable_price(
+                    price[0],
+                    "",
+                    query,
+                ):
+                    return price
 
         except Exception as e:
 
@@ -278,6 +306,7 @@ class WebSearchAdapter(ShopAdapter):
                 price = float(value)
 
                 if 0 < price < 100000000:
+
                     currency = self.detect_currency(
                         html
                     )
@@ -301,7 +330,6 @@ class WebSearchAdapter(ShopAdapter):
             r'content=["\']([\d.,]+)["\'][^>]*itemprop=["\']price',
 
             r'meta[^>]+property=["\']product:price:amount["\'][^>]+content=["\']([\d.,]+)',
-
         ]
 
         for pattern in patterns:
@@ -336,6 +364,123 @@ class WebSearchAdapter(ShopAdapter):
                 continue
 
         return None
+
+    def extract_price(
+        self,
+        text: str,
+    ):
+
+        patterns = [
+
+            r"(\d[\d\s.,]*)\s*(₽|руб\.?|RUB)",
+
+            r"(\$)\s*(\d[\d\s.,]*)",
+
+            r"(\d[\d\s.,]*)\s*(\$|USD)",
+
+            r"(\d[\d\s.,]*)\s*(€|EUR)",
+
+            r"(\d[\d\s.,]*)\s*(BYN|Br)",
+
+            r"(\d[\d\s.,]*)\s*(грн|UAH)",
+
+            r"(\d[\d\s.,]*)\s*(₸|KZT)",
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                text,
+                re.IGNORECASE,
+            )
+
+            if not match:
+                continue
+
+            try:
+
+                numbers = [
+                    item
+                    for item in match.groups()
+                    if re.search(
+                        r"\d",
+                        item,
+                    )
+                ]
+
+                if not numbers:
+                    continue
+
+                number = numbers[0]
+
+                number = (
+                    number
+                    .replace(" ", "")
+                    .replace(",", ".")
+                )
+
+                price = float(number)
+
+                currency = self.detect_currency(
+                    text
+                )
+
+                if 0 < price < 100000000:
+
+                    return price, currency
+
+            except Exception:
+                continue
+
+        return None, None
+
+    def is_reasonable_price(
+        self,
+        price,
+        title: str,
+        query: str,
+    ) -> bool:
+
+        if price is None:
+            return False
+
+        if price <= 0:
+            return False
+
+        text = (
+            title + " " + query
+        ).lower()
+
+        # Защита от случайных маленьких чисел.
+        if price < 10:
+
+            expensive_keywords = [
+                "iphone",
+                "apple",
+                "samsung",
+                "sony",
+                "macbook",
+                "playstation",
+                "телефон",
+                "смартфон",
+                "ноутбук",
+                "телевизор",
+                "куртка",
+                "обувь",
+            ]
+
+            for word in expensive_keywords:
+
+                if word in text:
+                    return False
+
+        # Защита от явно подозрительных
+        # экстремально больших значений.
+        if price > 50000000:
+            return False
+
+        return True
 
     def is_product_result(
         self,
@@ -416,75 +561,6 @@ class WebSearchAdapter(ShopAdapter):
                 return True
 
         return False
-
-    def extract_price(
-        self,
-        text: str,
-    ):
-
-        patterns = [
-
-            r"(\d[\d\s.,]*)\s*(₽|руб\.?|RUB)",
-
-            r"(\$)\s*(\d[\d\s.,]*)",
-
-            r"(\d[\d\s.,]*)\s*(\$|USD)",
-
-            r"(\d[\d\s.,]*)\s*(€|EUR)",
-
-            r"(\d[\d\s.,]*)\s*(BYN|Br)",
-
-            r"(\d[\d\s.,]*)\s*(грн|UAH)",
-
-            r"(\d[\d\s.,]*)\s*(₸|KZT)",
-        ]
-
-        for pattern in patterns:
-
-            match = re.search(
-                pattern,
-                text,
-                re.IGNORECASE,
-            )
-
-            if not match:
-                continue
-
-            try:
-
-                numbers = [
-                    item
-                    for item in match.groups()
-                    if re.search(
-                        r"\d",
-                        item,
-                    )
-                ]
-
-                if not numbers:
-                    continue
-
-                number = numbers[0]
-
-                number = (
-                    number
-                    .replace(" ", "")
-                    .replace(",", ".")
-                )
-
-                price = float(number)
-
-                currency = self.detect_currency(
-                    text
-                )
-
-                if 0 < price < 100000000:
-                    return price, currency
-
-            except Exception:
-                continue
-
-        return None, None
 
     def detect_currency(
         self,
