@@ -1,3 +1,6 @@
+import time
+from typing import Optional
+
 import requests
 
 
@@ -14,92 +17,181 @@ SUPPORTED_CURRENCIES = {
 }
 
 
-def normalize_currency(currency: str | None) -> str | None:
+CURRENCY_ALIASES = {
+    # USD
+    "$": "USD",
+    "usd": "USD",
+    "доллар": "USD",
+    "доллара": "USD",
+    "долларов": "USD",
+    "долл": "USD",
+
+    # EUR
+    "€": "EUR",
+    "eur": "EUR",
+    "евро": "EUR",
+
+    # GBP
+    "£": "GBP",
+    "gbp": "GBP",
+    "фунт": "GBP",
+    "фунта": "GBP",
+    "фунтов": "GBP",
+
+    # RUB
+    "₽": "RUB",
+    "rub": "RUB",
+    "руб": "RUB",
+    "рубль": "RUB",
+    "рубля": "RUB",
+    "рублей": "RUB",
+    "российский рубль": "RUB",
+    "российских рублей": "RUB",
+
+    # BYN
+    "byn": "BYN",
+    "белорусский рубль": "BYN",
+    "белорусских рублей": "BYN",
+    "белорусских руб": "BYN",
+    "бел. руб": "BYN",
+
+    # PLN
+    "pln": "PLN",
+    "злотый": "PLN",
+    "злотого": "PLN",
+    "злотых": "PLN",
+    "зл": "PLN",
+
+    # KZT
+    "₸": "KZT",
+    "kzt": "KZT",
+    "тенге": "KZT",
+
+    # UAH
+    "₴": "UAH",
+    "uah": "UAH",
+    "гривна": "UAH",
+    "гривны": "UAH",
+    "гривен": "UAH",
+
+    # CNY
+    "¥": "CNY",
+    "cny": "CNY",
+    "юань": "CNY",
+    "юаня": "CNY",
+    "юаней": "CNY",
+}
+
+
+# Кэш курсов, чтобы не обращаться к API при каждом товаре
+_rates_cache = {}
+_rates_cache_time = {}
+
+RATES_CACHE_TTL = 3600  # 1 час
+
+
+def normalize_currency(currency: Optional[str]) -> Optional[str]:
+    """
+    Преобразует различные обозначения валюты в ISO-код.
+    """
 
     if not currency:
         return None
 
-    value = currency.strip().lower()
+    value = str(currency).strip().lower()
 
-    aliases = {
-        "$": "USD",
-        "usd": "USD",
-        "доллар": "USD",
-        "доллара": "USD",
-        "долларов": "USD",
+    if value in CURRENCY_ALIASES:
+        return CURRENCY_ALIASES[value]
 
-        "€": "EUR",
-        "eur": "EUR",
-        "евро": "EUR",
+    upper_value = value.upper()
 
-        "£": "GBP",
-        "gbp": "GBP",
-        "фунт": "GBP",
-        "фунтов": "GBP",
-
-        "₽": "RUB",
-        "rub": "RUB",
-        "руб": "RUB",
-        "рубль": "RUB",
-        "рубля": "RUB",
-        "рублей": "RUB",
-
-        "р": "BYN",
-        "byn": "BYN",
-        "белорусский рубль": "BYN",
-        "белорусских рублей": "BYN",
-        "белорусских руб": "BYN",
-
-        "pln": "PLN",
-        "злотый": "PLN",
-        "злотых": "PLN",
-
-        "kzt": "KZT",
-        "₸": "KZT",
-        "тенге": "KZT",
-
-        "uah": "UAH",
-        "₴": "UAH",
-        "гривна": "UAH",
-        "гривен": "UAH",
-
-        "cny": "CNY",
-        "¥": "CNY",
-        "юань": "CNY",
-        "юаней": "CNY",
-    }
-
-    if value in aliases:
-        return aliases[value]
-
-    value = value.upper()
-
-    if value in SUPPORTED_CURRENCIES:
-        return value
+    if upper_value in SUPPORTED_CURRENCIES:
+        return upper_value
 
     return None
 
 
-def get_exchange_rates(
-    base_currency: str = "USD"
-) -> dict:
+def detect_currency_from_text(text: str) -> Optional[str]:
+    """
+    Определяет валюту непосредственно из текста пользователя.
+    """
 
-    base_currency = normalize_currency(
-        base_currency
-    )
+    if not text:
+        return None
 
-    if not base_currency:
-        base_currency = "USD"
+    text_lower = text.lower()
 
-    # Первый источник
+    # Более специфичные варианты проверяем раньше коротких.
+    checks = [
+        ("белорусских рублей", "BYN"),
+        ("белорусский рубль", "BYN"),
+        ("российских рублей", "RUB"),
+        ("российский рубль", "RUB"),
+        ("злотых", "PLN"),
+        ("гривен", "UAH"),
+        ("тенге", "KZT"),
+        ("юаней", "CNY"),
+        ("долларов", "USD"),
+        ("доллара", "USD"),
+        ("евро", "EUR"),
+        ("рублей", "RUB"),
+        ("рубля", "RUB"),
+        ("рубль", "RUB"),
+        ("злотый", "PLN"),
+        ("гривна", "UAH"),
+        ("юань", "CNY"),
+        ("фунтов", "GBP"),
+        ("фунт", "GBP"),
+        ("byn", "BYN"),
+        ("usd", "USD"),
+        ("eur", "EUR"),
+        ("gbp", "GBP"),
+        ("rub", "RUB"),
+        ("pln", "PLN"),
+        ("kzt", "KZT"),
+        ("uah", "UAH"),
+        ("cny", "CNY"),
+        ("$", "USD"),
+        ("€", "EUR"),
+        ("£", "GBP"),
+        ("₽", "RUB"),
+        ("₸", "KZT"),
+        ("₴", "UAH"),
+        ("¥", "CNY"),
+    ]
+
+    for marker, currency in checks:
+        if marker in text_lower:
+            return currency
+
+    return None
+
+
+def get_exchange_rates(base_currency: str = "USD") -> dict:
+    """
+    Получает курсы валют относительно базовой валюты.
+    Использует кэш + резервный API.
+    """
+
+    base_currency = normalize_currency(base_currency) or "USD"
+
+    now = time.time()
+
+    cached_rates = _rates_cache.get(base_currency)
+    cached_time = _rates_cache_time.get(base_currency, 0)
+
+    if (
+        cached_rates
+        and now - cached_time < RATES_CACHE_TTL
+    ):
+        return cached_rates
+
+    # Основной источник
     try:
-
-        url = "https://api.frankfurter.app/latest"
-
         response = requests.get(
-            url,
+            "https://api.frankfurter.app/latest",
             params={
-                "from": base_currency
+                "from": base_currency,
             },
             timeout=10,
         )
@@ -108,30 +200,26 @@ def get_exchange_rates(
 
         data = response.json()
 
-        rates = data.get(
-            "rates",
-            {}
-        )
+        rates = data.get("rates", {})
 
         rates[base_currency] = 1.0
 
         if rates:
+            _rates_cache[base_currency] = rates
+            _rates_cache_time[base_currency] = now
+
             return rates
 
     except Exception as e:
-
         print(
             "Frankfurter currency error:",
-            e
+            e,
         )
 
     # Резервный источник
     try:
-
-        url = "https://open.er-api.com/v6/latest/"
-
         response = requests.get(
-            url + base_currency,
+            f"https://open.er-api.com/v6/latest/{base_currency}",
             timeout=10,
         )
 
@@ -139,23 +227,23 @@ def get_exchange_rates(
 
         data = response.json()
 
-        rates = data.get(
-            "rates",
-            {}
-        )
+        rates = data.get("rates", {})
 
         rates[base_currency] = 1.0
 
         if rates:
+            _rates_cache[base_currency] = rates
+            _rates_cache_time[base_currency] = now
+
             return rates
 
     except Exception as e:
-
         print(
-            "ExchangeRate-API error:",
-            e
+            "ExchangeRate API error:",
+            e,
         )
 
+    # Хотя бы возвращаем базовую валюту
     return {
         base_currency: 1.0
     }
@@ -165,7 +253,13 @@ def convert_currency(
     amount: float,
     from_currency: str,
     to_currency: str,
-) -> float | None:
+) -> Optional[float]:
+    """
+    Конвертирует сумму из одной валюты в другую.
+    """
+
+    if amount is None:
+        return None
 
     from_currency = normalize_currency(
         from_currency
@@ -178,29 +272,49 @@ def convert_currency(
     if not from_currency or not to_currency:
         return None
 
+    try:
+        amount = float(amount)
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
     if from_currency == to_currency:
-        return float(amount)
+        return amount
 
     rates = get_exchange_rates(
         from_currency
     )
 
-    rate = rates.get(
-        to_currency
-    )
+    rate = rates.get(to_currency)
 
     if rate is None:
-
         print(
             "Currency rate not found:",
             from_currency,
             "->",
             to_currency,
         )
-
         return None
 
-    return float(amount) * float(rate)
+    return amount * float(rate)
+
+
+def convert_to_budget_currency(
+    price: float,
+    price_currency: str,
+    budget_currency: str,
+) -> Optional[float]:
+    """
+    Переводит цену товара в валюту бюджета.
+    """
+
+    return convert_currency(
+        price,
+        price_currency,
+        budget_currency,
+    )
 
 
 def is_within_budget(
@@ -209,8 +323,11 @@ def is_within_budget(
     budget: float,
     budget_currency: str,
 ) -> bool:
+    """
+    Проверяет, укладывается ли товар в бюджет.
+    """
 
-    converted_price = convert_currency(
+    converted_price = convert_to_budget_currency(
         price,
         price_currency,
         budget_currency,
@@ -222,14 +339,56 @@ def is_within_budget(
     return converted_price <= budget
 
 
-def convert_to_budget_currency(
-    price: float,
-    price_currency: str,
-    budget_currency: str,
-) -> float | None:
+def format_money(
+    amount: float,
+    currency: str,
+) -> str:
+    """
+    Красивое отображение денег.
+    """
 
-    return convert_currency(
-        price,
-        price_currency,
-        budget_currency,
+    currency = normalize_currency(currency)
+
+    symbols = {
+        "BYN": "Br",
+        "RUB": "₽",
+        "USD": "$",
+        "EUR": "€",
+        "GBP": "£",
+        "PLN": "zł",
+        "KZT": "₸",
+        "UAH": "₴",
+        "CNY": "¥",
+    }
+
+    symbol = symbols.get(
+        currency,
+        currency or "",
     )
+
+    if currency in {
+        "USD",
+        "EUR",
+        "GBP",
+    }:
+        return f"{symbol}{amount:.2f}"
+
+    if currency == "BYN":
+        return f"{amount:.2f} Br"
+
+    if currency == "RUB":
+        return f"{amount:.2f} ₽"
+
+    if currency == "PLN":
+        return f"{amount:.2f} zł"
+
+    if currency == "KZT":
+        return f"{amount:.2f} ₸"
+
+    if currency == "UAH":
+        return f"{amount:.2f} ₴"
+
+    if currency == "CNY":
+        return f"{amount:.2f} ¥"
+
+    return f"{amount:.2f} {currency or ''}".strip()
