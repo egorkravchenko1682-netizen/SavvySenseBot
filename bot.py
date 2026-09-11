@@ -5,6 +5,11 @@ import telebot
 
 from search import GlobalSearch
 from ai_parser import parse_user_request
+from currency import (
+    convert_to_budget_currency,
+    format_money,
+    normalize_currency,
+)
 
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -17,6 +22,10 @@ bot = telebot.TeleBot(TOKEN)
 
 search_engine = GlobalSearch()
 
+
+# =========================================================
+# START
+# =========================================================
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -35,6 +44,10 @@ def start(message):
     )
 
 
+# =========================================================
+# HELP
+# =========================================================
+
 @bot.message_handler(commands=["help"])
 def help_command(message):
 
@@ -46,11 +59,20 @@ def help_command(message):
         "📱 iPhone 15 до 500$\n"
         "👕 чёрная футболка Adidas до 100р\n"
         "🎧 хорошие наушники до 200€\n"
-        "💻 мощный ноутбук для игр до 1000$\n\n"
+        "💻 мощный ноутбук для игр до 1000$\n"
+        "📱 iPhone 15 до 500 EUR\n"
+        "📱 iPhone 15 до 1500 PLN\n\n"
+        "Я автоматически распознаю валюту "
+        "и переведу цены найденных товаров "
+        "в валюту твоего бюджета.\n\n"
         "Также можно отправить 📸 фото "
         "или 🔗 ссылку на товар."
     )
 
+
+# =========================================================
+# ПОКАЗАТЬ, ЧТО SAVVY ПОНЯЛ
+# =========================================================
 
 def show_understanding(
     chat_id,
@@ -62,16 +84,35 @@ def show_understanding(
     ]
 
     if parsed.category:
+
         category_names = {
-            "smartphone": "📱 Смартфон",
-            "laptop": "💻 Ноутбук",
-            "headphones": "🎧 Наушники",
-            "tv": "📺 Телевизор",
-            "clothing": "👕 Одежда",
-            "shoes": "👟 Обувь",
-            "watch": "⌚ Часы",
-            "camera": "📷 Камера",
-            "gaming": "🎮 Игровая техника",
+
+            "smartphone":
+                "📱 Смартфон",
+
+            "laptop":
+                "💻 Ноутбук",
+
+            "headphones":
+                "🎧 Наушники",
+
+            "tv":
+                "📺 Телевизор",
+
+            "clothing":
+                "👕 Одежда",
+
+            "shoes":
+                "👟 Обувь",
+
+            "watch":
+                "⌚ Часы",
+
+            "camera":
+                "📷 Камера",
+
+            "gaming":
+                "🎮 Игровая техника",
         }
 
         lines.append(
@@ -106,9 +147,15 @@ def show_understanding(
     if parsed.gender:
 
         gender_names = {
-            "male": "мужской",
-            "female": "женский",
-            "children": "детский",
+
+            "male":
+                "мужской",
+
+            "female":
+                "женский",
+
+            "children":
+                "детский",
         }
 
         lines.append(
@@ -125,21 +172,37 @@ def show_understanding(
     ):
 
         lines.append(
-            f"💰 Бюджет: "
-            f"{parsed.max_price:g} "
-            f"{parsed.currency}"
+            "💰 Бюджет: "
+            + format_money(
+                parsed.max_price,
+                parsed.currency,
+            )
         )
 
     if parsed.priorities:
 
         priority_names = {
-            "price": "цена",
-            "качество": "качество",
-            "camera": "камера",
-            "battery": "автономность",
-            "performance": "производительность",
-            "original": "оригинальность",
-            "delivery": "доставка",
+
+            "price":
+                "цена",
+
+            "качество":
+                "качество",
+
+            "camera":
+                "камера",
+
+            "battery":
+                "автономность",
+
+            "performance":
+                "производительность",
+
+            "original":
+                "оригинальность",
+
+            "delivery":
+                "доставка",
         }
 
         readable = []
@@ -159,7 +222,7 @@ def show_understanding(
         )
 
     lines.append(
-        "\n🌎 Начинаю поиск..."
+        "\n🌎 Ищу лучшие предложения..."
     )
 
     bot.send_message(
@@ -168,9 +231,14 @@ def show_understanding(
     )
 
 
+# =========================================================
+# GREETING
+# =========================================================
+
 def is_greeting(text):
 
     greetings = [
+
         "привет",
         "здравствуйте",
         "здравствуй",
@@ -186,6 +254,10 @@ def is_greeting(text):
         in greetings
     )
 
+
+# =========================================================
+# /FIND
+# =========================================================
 
 @bot.message_handler(commands=["find"])
 def find_command(message):
@@ -212,6 +284,10 @@ def find_command(message):
     )
 
 
+# =========================================================
+# /COMPARE
+# =========================================================
+
 @bot.message_handler(commands=["compare"])
 def compare_command(message):
 
@@ -236,6 +312,10 @@ def compare_command(message):
         query,
     )
 
+
+# =========================================================
+# /CHEAPER
+# =========================================================
 
 @bot.message_handler(commands=["cheaper"])
 def cheaper_command(message):
@@ -262,6 +342,10 @@ def cheaper_command(message):
     )
 
 
+# =========================================================
+# /CHECK
+# =========================================================
+
 @bot.message_handler(commands=["check"])
 def check_command(message):
 
@@ -286,6 +370,10 @@ def check_command(message):
         query,
     )
 
+
+# =========================================================
+# /TRACK
+# =========================================================
 
 @bot.message_handler(commands=["track"])
 def track_command(message):
@@ -315,6 +403,10 @@ def track_command(message):
     )
 
 
+# =========================================================
+# ОСНОВНАЯ ОБРАБОТКА ТЕКСТА
+# =========================================================
+
 def process_text_query(
     chat_id,
     text,
@@ -334,14 +426,27 @@ def process_text_query(
 
         return
 
+    # -----------------------------------------------------
+    # AI ПАРСЕР
+    # -----------------------------------------------------
+
     parsed = parse_user_request(
         text
     )
+
+    # -----------------------------------------------------
+    # ПОКАЗЫВАЕМ ПОЛЬЗОВАТЕЛЮ,
+    # ЧТО БОТ ПОНЯЛ
+    # -----------------------------------------------------
 
     show_understanding(
         chat_id,
         parsed,
     )
+
+    # -----------------------------------------------------
+    # ПОИСК
+    # -----------------------------------------------------
 
     search_query = parsed.original_text
 
@@ -349,24 +454,36 @@ def process_text_query(
         search_query
     )
 
+    # -----------------------------------------------------
+    # НИЧЕГО НЕ НАЙДЕНО
+    # -----------------------------------------------------
+
     if not results:
 
         bot.send_message(
             chat_id,
-            "🔎 Пока не удалось найти "
-            "подходящие предложения.\n\n"
-            "Я сохранил структуру запроса "
-            "и следующим этапом улучшим "
-            "поисковый слой."
+            "🔎 Подходящих предложений "
+            "пока не найдено.\n\n"
+            "Попробуй изменить запрос "
+            "или увеличить бюджет."
         )
 
         return
 
+    # -----------------------------------------------------
+    # РЕЗУЛЬТАТЫ
+    # -----------------------------------------------------
+
     send_results(
         chat_id,
         results,
+        parsed,
     )
 
+
+# =========================================================
+# ОБРАБОТКА ССЫЛКИ
+# =========================================================
 
 def process_link(
     chat_id,
@@ -417,8 +534,13 @@ def process_link(
     send_results(
         chat_id,
         results,
+        None,
     )
 
+
+# =========================================================
+# ТЕКСТОВЫЕ СООБЩЕНИЯ
+# =========================================================
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
@@ -449,43 +571,203 @@ def handle_text(message):
     )
 
 
+# =========================================================
+# ФОРМАТИРОВАНИЕ РЕЗУЛЬТАТА
+# =========================================================
+
 def send_results(
     chat_id,
     results,
+    parsed=None,
 ):
 
     lines = [
         "🌎 РЕЗУЛЬТАТЫ ПОИСКА\n"
     ]
 
+    # -----------------------------------------------------
+    # ВАЛЮТА БЮДЖЕТА
+    # -----------------------------------------------------
+
+    budget_currency = None
+    budget = None
+
+    if parsed:
+
+        budget_currency = normalize_currency(
+            parsed.currency
+        )
+
+        budget = parsed.max_price
+
+    # -----------------------------------------------------
+    # РЕЗУЛЬТАТЫ
+    # -----------------------------------------------------
+
     for index, item in enumerate(
         results[:10],
         start=1,
     ):
 
-        if item.price is not None:
+        # -------------------------------------------------
+        # ИСХОДНАЯ ЦЕНА
+        # -------------------------------------------------
 
-            price = (
-                f"{item.price:.2f} "
-                f"{item.currency}"
+        if (
+            item.price is not None
+            and item.currency
+        ):
+
+            original_price = format_money(
+                item.price,
+                item.currency,
             )
 
         else:
 
-            price = "цена не указана"
+            original_price = (
+                "цена не указана"
+            )
+
+        # -------------------------------------------------
+        # КОНВЕРТАЦИЯ
+        # -------------------------------------------------
+
+        converted_price = None
+
+        if (
+            item.price is not None
+            and item.currency
+            and budget_currency
+        ):
+
+            converted_price = (
+                convert_to_budget_currency(
+                    item.price,
+                    item.currency,
+                    budget_currency,
+                )
+            )
+
+        # -------------------------------------------------
+        # ЦЕНА В ВАЛЮТЕ БЮДЖЕТА
+        # -------------------------------------------------
+
+        converted_line = ""
+
+        if (
+            converted_price is not None
+            and budget_currency
+            and normalize_currency(
+                item.currency
+            ) != budget_currency
+        ):
+
+            converted_line = (
+                "\n"
+                "💱 ≈ "
+                + format_money(
+                    converted_price,
+                    budget_currency,
+                )
+            )
+
+        # -------------------------------------------------
+        # РАЗНИЦА ДО БЮДЖЕТА
+        # -------------------------------------------------
+
+        budget_line = ""
+
+        if (
+            converted_price is not None
+            and budget is not None
+        ):
+
+            difference = (
+                budget
+                - converted_price
+            )
+
+            if difference >= 0:
+
+                budget_line = (
+                    "\n"
+                    "🎯 В бюджете: "
+                    + format_money(
+                        difference,
+                        budget_currency,
+                    )
+                    + " осталось"
+                )
+
+            else:
+
+                budget_line = (
+                    "\n"
+                    "⚠️ Превышение бюджета: "
+                    + format_money(
+                        abs(difference),
+                        budget_currency,
+                    )
+                )
+
+        # -------------------------------------------------
+        # DEAL SCORE
+        # -------------------------------------------------
+
+        score_line = ""
+
+        try:
+
+            from deal_score import (
+                calculate_deal_score,
+                deal_label,
+            )
+
+            score = calculate_deal_score(
+                item
+            )
+
+            score_line = (
+                "\n"
+                f"⭐ SAVVY SCORE: {score}/100 "
+                f"{deal_label(score)}"
+            )
+
+        except Exception as e:
+
+            print(
+                "Deal Score error:",
+                e,
+            )
+
+        # -------------------------------------------------
+        # СОБИРАЕМ КАРТОЧКУ
+        # -------------------------------------------------
 
         lines.append(
             f"{index}. 🛍 {item.shop}\n"
             f"📦 {item.name}\n"
-            f"💰 {price}\n"
+            f"💰 {original_price}"
+            f"{converted_line}"
+            f"{budget_line}"
+            f"{score_line}\n"
             f"🔗 {item.url}\n"
         )
+
+    # -----------------------------------------------------
+    # ОТПРАВЛЯЕМ
+    # -----------------------------------------------------
 
     bot.send_message(
         chat_id,
         "\n".join(lines)
     )
 
+
+# =========================================================
+# ФОТО
+# =========================================================
 
 @bot.message_handler(
     content_types=["photo"]
@@ -501,6 +783,10 @@ def handle_photo(message):
         "и искал его по всему миру."
     )
 
+
+# =========================================================
+# ЗАПУСК
+# =========================================================
 
 print(
     "SAVVY SENSE started"
