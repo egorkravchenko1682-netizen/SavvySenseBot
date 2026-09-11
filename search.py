@@ -10,12 +10,12 @@ from adapters.wildberries import WildberriesAdapter
 from adapters.ozon import OzonAdapter
 from adapters.amazon import AmazonAdapter
 from adapters.aliexpress import AliExpressAdapter
-from adapters.ebay_api import EbayApiAdapter
 from adapters.temu import TemuAdapter
 from adapters.taobao import TaobaoAdapter
 from adapters.jd import JdAdapter
 from adapters.walmart import WalmartAdapter
 from adapters.web_search import WebSearchAdapter
+from adapters.ebay_api import EbayApiAdapter
 
 from currency import (
     normalize_currency,
@@ -24,16 +24,21 @@ from currency import (
 
 
 class SearchQuery:
-
     def __init__(
         self,
         query: str,
         max_price: Optional[float] = None,
         currency: Optional[str] = None,
+        category: Optional[str] = None,
+        brand: Optional[str] = None,
+        model: Optional[str] = None,
     ):
         self.query = query
         self.max_price = max_price
         self.currency = normalize_currency(currency)
+        self.category = category
+        self.brand = brand
+        self.model = model
 
 
 class GlobalSearch:
@@ -53,6 +58,10 @@ class GlobalSearch:
             WebSearchAdapter(),
         ]
 
+    # ---------------------------------------------------------
+    # PARSE QUERY
+    # ---------------------------------------------------------
+
     def parse_query(self, text: str) -> SearchQuery:
 
         original = text.strip()
@@ -62,91 +71,68 @@ class GlobalSearch:
 
         price_patterns = [
 
-            # BYN
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*р\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*р\b",
                 "BYN",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*"
-                r"(?:руб(?:лей|ля)?|белорусских\s+рублей)",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*(?:руб(?:лей|ля)?|белорусских\s+рублей)",
                 "BYN",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*BYN\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*BYN\b",
                 "BYN",
             ),
 
-            # USD
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*\$",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*\$",
                 "USD",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*\$\s*([\d\s.,]+)",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*\$\s*([\d\s.,]+)",
                 "USD",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*"
-                r"(?:USD|доллар(?:а|ов)?)\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*(?:USD|доллар(?:а|ов)?)\b",
                 "USD",
             ),
 
-            # EUR
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*€",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*€",
                 "EUR",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*€\s*([\d\s.,]+)",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*€\s*([\d\s.,]+)",
                 "EUR",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*"
-                r"(?:EUR|евро)\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*(?:EUR|евро)\b",
                 "EUR",
             ),
 
-            # RUB
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*₽",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*₽",
                 "RUB",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*"
-                r"(?:российских\s+рублей)\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*(?:российских\s+рублей)",
                 "RUB",
             ),
 
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*RUB\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*RUB\b",
                 "RUB",
             ),
 
-            # PLN
             (
-                r"(?:до|не\s+дороже|максимум|не\s+более)"
-                r"\s*([\d\s.,]+)\s*"
-                r"(?:PLN|злотых|злот)\b",
+                r"(?:до|не\s+дороже|максимум|не\s+более)\s*([\d\s.,]+)\s*(?:PLN|злотых|злот)\b",
                 "PLN",
             ),
         ]
@@ -162,10 +148,8 @@ class GlobalSearch:
             if not match:
                 continue
 
-            raw_price = match.group(1)
-
             raw_price = (
-                raw_price
+                match.group(1)
                 .replace(" ", "")
                 .replace(",", ".")
             )
@@ -178,21 +162,25 @@ class GlobalSearch:
                 break
 
             except ValueError:
-
                 pass
 
         cleaned = original
 
         cleanup_patterns = [
+
             r"\bмне\s+нужен\b",
             r"\bмне\s+нужна\b",
             r"\bмне\s+нужно\b",
+
             r"\bнужен\b",
             r"\bнужна\b",
             r"\bнужно\b",
+
             r"\bхочу\b",
+
             r"\bхотел\s+бы\b",
             r"\bхотела\s+бы\b",
+
             r"\bкупить\b",
             r"\bнайди\b",
             r"\bпоищи\b",
@@ -213,21 +201,11 @@ class GlobalSearch:
 
         budget_patterns = [
 
-            r"(?:до|не\s+дороже|максимум|не\s+более)"
-            r"\s*[\$€]\s*[\d\s.,]+",
+            r"(?:до|не\s+дороже|максимум|не\s+более)\s*[\$€]\s*[\d\s.,]+",
 
-            r"(?:до|не\s+дороже|максимум|не\s+более)"
-            r"\s*[\d\s.,]+\s*"
-            r"(?:\$|€|₽|р\b)",
+            r"(?:до|не\s+дороже|максимум|не\s+более)\s*[\d\s.,]+\s*(?:\$|€|₽|р\b)",
 
-            r"(?:до|не\s+дороже|максимум|не\s+более)"
-            r"\s*[\d\s.,]+\s*"
-            r"(?:BYN|USD|EUR|RUB|PLN|"
-            r"доллар(?:а|ов)?|евро|"
-            r"руб(?:лей|ля)?|"
-            r"российских\s+рублей|"
-            r"белорусских\s+рублей|"
-            r"злотых|злот)",
+            r"(?:до|не\s+дороже|максимум|не\s+более)\s*[\d\s.,]+\s*(?:BYN|USD|EUR|RUB|PLN|доллар(?:а|ов)?|евро|руб(?:лей|ля)?|российских\s+рублей|белорусских\s+рублей|злотых|злот)",
         ]
 
         for pattern in budget_patterns:
@@ -251,9 +229,13 @@ class GlobalSearch:
             currency=currency,
         )
 
+    # ---------------------------------------------------------
+    # PRODUCT FROM LINK
+    # ---------------------------------------------------------
+
     def get_product_from_link(
         self,
-        url: str
+        url: str,
     ) -> Product | None:
 
         for adapter in self.adapters:
@@ -278,9 +260,13 @@ class GlobalSearch:
 
         return None
 
+    # ---------------------------------------------------------
+    # GLOBAL SEARCH
+    # ---------------------------------------------------------
+
     def search_everywhere(
         self,
-        query: str
+        query: str,
     ) -> List[Product]:
 
         parsed = self.parse_query(query)
@@ -305,6 +291,7 @@ class GlobalSearch:
                 )
 
                 if products:
+
                     results.extend(products)
 
             except Exception as e:
@@ -314,13 +301,28 @@ class GlobalSearch:
                     e,
                 )
 
+        print(
+            "TOTAL RAW RESULTS:",
+            len(results),
+        )
+
         results = self.remove_bad_results(
             results,
             parsed,
         )
 
+        print(
+            "RESULTS AFTER FILTER:",
+            len(results),
+        )
+
         results = self.remove_duplicates(
-            results,
+            results
+        )
+
+        print(
+            "RESULTS AFTER DEDUP:",
+            len(results),
         )
 
         return self.rank_results(
@@ -328,22 +330,90 @@ class GlobalSearch:
             parsed,
         )
 
+    # ---------------------------------------------------------
+    # FILTER RESULTS
+    # ---------------------------------------------------------
+
     def remove_bad_results(
         self,
-        products: List[Product],
-        parsed: SearchQuery,
-    ) -> List[Product]:
+        products,
+        parsed,
+    ):
 
         clean_results = []
+
+        accessory_words = [
+
+            # English
+            "case",
+            "cover",
+            "screen",
+            "display",
+            "digitizer",
+            "replacement",
+            "repair",
+            "repair kit",
+            "battery",
+            "charger",
+            "charging cable",
+            "cable",
+            "adapter",
+            "glass",
+            "back glass",
+            "rear cover",
+            "housing",
+            "frame",
+            "protector",
+            "screen protector",
+            "earpods",
+            "airpods",
+            "headphones",
+            "earbuds",
+
+            # Russian
+            "чехол",
+            "стекло",
+            "экран",
+            "дисплей",
+            "тачскрин",
+            "запчасть",
+            "запчасти",
+            "замена",
+            "ремонт",
+            "ремонтный комплект",
+            "зарядка",
+            "кабель",
+            "адаптер",
+            "защитное стекло",
+            "наушники",
+            "крышка",
+            "корпус",
+            "рамка",
+        ]
+
+        main_product_categories = [
+
+            "smartphone",
+            "laptop",
+            "headphones",
+            "tv",
+            "camera",
+            "gaming",
+        ]
 
         for product in products:
 
             if not product.name:
                 continue
 
-            name = product.name.lower()
+            name = product.name.lower().strip()
+
+            # ---------------------------------------------
+            # Убираем информационный мусор
+            # ---------------------------------------------
 
             bad_words = [
+
                 "категория",
                 "catalog",
                 "каталог",
@@ -361,8 +431,130 @@ class GlobalSearch:
             ):
                 continue
 
-            # Если есть бюджет —
-            # проверяем его независимо от валюты товара.
+            # ---------------------------------------------
+            # Убираем аксессуары и запчасти
+            # ---------------------------------------------
+
+            if parsed.category in main_product_categories:
+
+                if any(
+                    word in name
+                    for word in accessory_words
+                ):
+                    continue
+
+            # ---------------------------------------------
+            # SMARTPHONE
+            # ---------------------------------------------
+
+            if parsed.category == "smartphone":
+
+                smartphone_words = [
+
+                    "iphone",
+                    "smartphone",
+                    "cell phone",
+                    "mobile phone",
+                    "смартфон",
+                    "телефон",
+                ]
+
+                if not any(
+                    word in name
+                    for word in smartphone_words
+                ):
+                    continue
+
+            # ---------------------------------------------
+            # LAPTOP
+            # ---------------------------------------------
+
+            if parsed.category == "laptop":
+
+                laptop_words = [
+
+                    "laptop",
+                    "notebook",
+                    "macbook",
+                    "chromebook",
+                    "ноутбук",
+                ]
+
+                if not any(
+                    word in name
+                    for word in laptop_words
+                ):
+                    continue
+
+            # ---------------------------------------------
+            # HEADPHONES
+            # ---------------------------------------------
+
+            if parsed.category == "headphones":
+
+                headphone_words = [
+
+                    "headphones",
+                    "headset",
+                    "earbuds",
+                    "earphones",
+                    "наушники",
+                ]
+
+                if not any(
+                    word in name
+                    for word in headphone_words
+                ):
+                    continue
+
+            # ---------------------------------------------
+            # CAMERA
+            # ---------------------------------------------
+
+            if parsed.category == "camera":
+
+                camera_words = [
+
+                    "camera",
+                    "digital camera",
+                    "mirrorless",
+                    "dslr",
+                    "фотоаппарат",
+                    "камера",
+                ]
+
+                if not any(
+                    word in name
+                    for word in camera_words
+                ):
+                    continue
+
+            # ---------------------------------------------
+            # MODEL
+            # ---------------------------------------------
+
+            if parsed.model:
+
+                model = parsed.model.lower()
+
+                if model not in name:
+                    continue
+
+            # ---------------------------------------------
+            # BRAND
+            # ---------------------------------------------
+
+            if parsed.brand:
+
+                brand = parsed.brand.lower()
+
+                if brand not in name:
+                    continue
+
+            # ---------------------------------------------
+            # BUDGET
+            # ---------------------------------------------
+
             if (
                 parsed.max_price is not None
                 and parsed.currency
@@ -371,23 +563,13 @@ class GlobalSearch:
             ):
 
                 converted_price = convert_to_budget_currency(
+
                     product.price,
                     product.currency,
                     parsed.currency,
                 )
 
                 if converted_price is None:
-
-                    print(
-                        "Currency conversion failed:",
-                        product.price,
-                        product.currency,
-                        "->",
-                        parsed.currency,
-                    )
-
-                    # Не утверждаем, что товар
-                    # находится в бюджете.
                     continue
 
                 print(
@@ -395,12 +577,19 @@ class GlobalSearch:
                     product.price,
                     product.currency,
                     "=>",
-                    round(converted_price, 2),
+                    round(
+                        converted_price,
+                        2,
+                    ),
                     parsed.currency,
                 )
 
                 if converted_price > parsed.max_price:
                     continue
+
+            # ---------------------------------------------
+            # PRICE SANITY CHECK
+            # ---------------------------------------------
 
             if product.price is not None:
 
@@ -408,6 +597,7 @@ class GlobalSearch:
                     continue
 
                 expensive_keywords = [
+
                     "iphone",
                     "apple",
                     "samsung",
@@ -440,12 +630,17 @@ class GlobalSearch:
 
         return clean_results
 
+    # ---------------------------------------------------------
+    # REMOVE DUPLICATES
+    # ---------------------------------------------------------
+
     def remove_duplicates(
         self,
-        products: List[Product]
-    ) -> List[Product]:
+        products,
+    ):
 
         unique = []
+
         seen = set()
 
         for product in products:
@@ -466,11 +661,15 @@ class GlobalSearch:
 
         return unique
 
+    # ---------------------------------------------------------
+    # RANK RESULTS
+    # ---------------------------------------------------------
+
     def rank_results(
         self,
-        products: List[Product],
-        parsed: SearchQuery | None = None,
-    ) -> List[Product]:
+        products,
+        parsed=None,
+    ):
 
         scored_products = []
 
@@ -480,14 +679,15 @@ class GlobalSearch:
                 product
             )
 
+            # Есть цена
             if product.price is not None:
                 score += 5
 
+            # Точное совпадение
             if product.is_exact_match:
                 score += 10
 
-            # Оцениваем близость к бюджету
-            # уже после конвертации валюты.
+            # Выгодность относительно бюджета
             if (
                 parsed
                 and parsed.max_price
@@ -497,6 +697,7 @@ class GlobalSearch:
             ):
 
                 converted_price = convert_to_budget_currency(
+
                     product.price,
                     product.currency,
                     parsed.currency,
@@ -510,12 +711,15 @@ class GlobalSearch:
                     )
 
                     if percentage <= 0.50:
+
                         score += 15
 
                     elif percentage <= 0.70:
+
                         score += 10
 
                     elif percentage <= 0.85:
+
                         score += 5
 
             score = min(
@@ -531,10 +735,12 @@ class GlobalSearch:
             )
 
         scored_products.sort(
+
             key=lambda item: (
                 item[0],
                 -(item[1].price or 999999999),
             ),
+
             reverse=True,
         )
 
