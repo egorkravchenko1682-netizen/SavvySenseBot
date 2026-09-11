@@ -10,7 +10,7 @@ from adapters.wildberries import WildberriesAdapter
 from adapters.ozon import OzonAdapter
 from adapters.amazon import AmazonAdapter
 from adapters.aliexpress import AliExpressAdapter
-from adapters.ebay import EbayAdapter
+from adapters.ebay_api import EbayApiAdapter
 from adapters.temu import TemuAdapter
 from adapters.taobao import TaobaoAdapter
 from adapters.jd import JdAdapter
@@ -45,7 +45,7 @@ class GlobalSearch:
             OzonAdapter(),
             AmazonAdapter(),
             AliExpressAdapter(),
-            EbayAdapter(),
+            EbayApiAdapter(),
             TemuAdapter(),
             TaobaoAdapter(),
             JdAdapter(),
