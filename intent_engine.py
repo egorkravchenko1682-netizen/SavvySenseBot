@@ -453,53 +453,45 @@ def parse_price_constraint(
 
     text = normalize_text(text)
 
-    # Диапазон:
-    # 100-200
-    # 100 — 200
+    # До X / не дороже X / максимум X
     match = re.search(
-        r"\b(\d+(?:[.,]\d+)?)\s*(?:-|до|—)\s*"
-        r"(\d+(?:[.,]\d+)?)\b",
+        r"(?:до|не\s+дороже|максимум|макс\.?|не\s+более)"
+        r"\s*(\d+(?:[.,]\d+)?)",
+        text,
+    )
+
+    if match:
+        return None, _number(match.group(1))
+
+    # От X / не дешевле X / минимум X
+    match = re.search(
+        r"(?:от|не\s+дешевле|минимум|мин\.?)"
+        r"\s*(\d+(?:[.,]\d+)?)",
+        text,
+    )
+
+    if match:
+        return _number(match.group(1)), None
+
+    # Диапазон цены только если рядом есть ценовой контекст
+    match = re.search(
+        r"(?:цена|стоимость|за)\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(?:-|—|до)\s*"
+        r"(\d+(?:[.,]\d+)?)",
         text,
     )
 
     if match:
         first = _number(match.group(1))
         second = _number(match.group(2))
-
         return min(first, second), max(first, second)
 
-    # До X
-    patterns_max = [
-        r"(?:до|не\s+дороже|максимум|макс\.?|не\s+более|в\s+пределах\s+до)"
-        r"\s*(\d+(?:[.,]\d+)?)",
-
-        r"(\d+(?:[.,]\d+)?)\s*(?:максимум|макс\.?)",
-    ]
-
-    for pattern in patterns_max:
-        match = re.search(pattern, text)
-
-        if match:
-            return None, _number(match.group(1))
-
-    # От X
-    patterns_min = [
-        r"(?:от|не\s+дешевле|минимум|мин\.?)"
-        r"\s*(\d+(?:[.,]\d+)?)",
-    ]
-
-    for pattern in patterns_min:
-        match = re.search(pattern, text)
-
-        if match:
-            return _number(match.group(1)), None
-
     # Явная цена:
-    # за 500
     # цена 500
-    # стоит 500
+    # стоимость 500
+    # за 500
     match = re.search(
-        r"(?:цена|стоит|стоимость|за)\s*"
+        r"(?:цена|стоимость|стоит|за)\s*"
         r"(\d+(?:[.,]\d+)?)",
         text,
     )
