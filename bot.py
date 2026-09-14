@@ -14,6 +14,8 @@ import requests
 from bs4 import BeautifulSoup
 import telebot
 
+from savvy_brain import understand
+
 try:
     from openai import OpenAI
 except Exception:
@@ -2043,21 +2045,19 @@ def search_everywhere(
     original_query: str
 ) -> List[Product]:
 
-    cleaned = clean_query(
-        original_query
+    brain = understand(
+        original_query,
+        country=DEFAULT_COUNTRY,
+        currency=DEFAULT_CURRENCY,
     )
 
-    cleaned, max_price, currency = (
-        parse_budget(cleaned)
-    )
-
-    cleaned = clean_query(
-        cleaned
-    )
+    query = brain["query"]
+    max_price = brain["max_price"]
+    currency = brain["currency"]
 
     print(
         "SAVVY QUERY:",
-        cleaned,
+        query,
         "MAX PRICE:",
         max_price,
         "CURRENCY:",
@@ -2066,76 +2066,72 @@ def search_everywhere(
 
     products = []
 
-    # --------------------------------------------------------
-    # eBay API
-    # --------------------------------------------------------
+    # eBay
+    try:
+        for product in ebay_client.search(query):
 
-    ebay_products = ebay_client.search(
-        cleaned
-    )
+            if not brain["accessory"]:
+                title = (
+                    product.name + " " +
+                    (product.source_text or "")
+                ).lower()
 
-    for product in ebay_products:
+                bad = (
+                    "case", "cover", "charger",
+                    "cable", "battery", "screen",
+                    "display", "чехол", "зарядка",
+                    "кабель", "аккумулятор", "дисплей"
+                )
 
-        if not product_matches_text(
-            product,
-            cleaned
-        ):
-            continue
+                if any(word in title for word in bad):
+                    continue
 
-        if not product_matches_budget(
-            product,
-            max_price,
-            currency
-        ):
-            continue
+            if product_matches_budget(
+                product,
+                max_price,
+                currency
+            ):
+                products.append(product)
 
-        products.append(
-            product
-        )
+    except Exception as e:
+        print("eBay error:", e)
+
+    # Web
+    try:
+        for product in web_search(query):
+
+            if not brain["accessory"]:
+                title = (
+                    product.name + " " +
+                    (product.source_text or "")
+                ).lower()
+
+                bad = (
+                    "case", "cover", "charger",
+                    "cable", "battery", "screen",
+                    "display", "чехол", "зарядка",
+                    "кабель", "аккумулятор", "дисплей"
+                )
+
+                if any(word in title for word in bad):
+                    continue
+
+            if product_matches_budget(
+                product,
+                max_price,
+                currency
+            ):
+                products.append(product)
+
+    except Exception as e:
+        print("WEB error:", e)
+
+    products = remove_duplicates(products)
+    products = rank_products(products)
 
     print(
-        "eBay accepted:",
+        "SAVVY RESULTS:",
         len(products)
-    )
-
-    # --------------------------------------------------------
-    # Web search
-    # --------------------------------------------------------
-
-    web_products = web_search(
-        cleaned
-    )
-
-    for product in web_products:
-
-        if not product_matches_text(
-            product,
-            cleaned
-        ):
-            continue
-
-        if not product_matches_budget(
-            product,
-            max_price,
-            currency
-        ):
-            continue
-
-        products.append(
-            product
-        )
-
-    print(
-        "Web accepted:",
-        len(web_products)
-    )
-
-    products = remove_duplicates(
-        products
-    )
-
-    products = rank_products(
-        products
     )
 
     return products[:MAX_RESULTS]
