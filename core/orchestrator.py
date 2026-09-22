@@ -21,6 +21,9 @@ from product import (
     build_search_plan,
 )
 
+from search import GlobalSearchEngine
+from search.adapters import DemoAdapter
+
 
 class SavvyCore:
 
@@ -28,16 +31,34 @@ class SavvyCore:
         self,
         config: Optional[SavvyConfig] = None,
     ):
-        self.config = config or SavvyConfig.load()
+
+        self.config = (
+            config or SavvyConfig.load()
+        )
+
+        self.search_engine = (
+            GlobalSearchEngine()
+        )
+
+        # Временный тестовый источник.
+        # Позже сюда добавятся реальные
+        # Amazon / eBay / AliExpress / etc.
+        self.search_engine.add_adapter(
+            DemoAdapter()
+        )
 
     def process(
         self,
         request: SavvyRequest,
     ) -> SavvyResponse:
 
-        self._prepare_request(request)
+        self._prepare_request(
+            request
+        )
 
-        input_data = self._parse_input(request)
+        input_data = (
+            self._parse_input(request)
+        )
 
         intent = detect_intent(
             text=request.text,
@@ -58,12 +79,35 @@ class SavvyCore:
             product_dna=product_dna,
         )
 
+        offers = []
+
+        # Поиск запускаем только
+        # когда есть поисковые запросы.
+        if search_plan.get("queries"):
+
+            offers = self.search_engine.search(
+                queries=search_plan["queries"],
+                region=search_plan.get(
+                    "region",
+                    request.user.region,
+                ),
+                currency=search_plan.get(
+                    "currency",
+                    request.user.currency,
+                ),
+                budget=search_plan.get(
+                    "budget",
+                    {},
+                ),
+            )
+
         return SavvyResponse(
             success=True,
             intent=intent,
 
             data={
                 "region": request.user.region,
+
                 "currency": request.user.currency,
 
                 "input": input_data,
@@ -73,6 +117,8 @@ class SavvyCore:
                 "product_dna": product_dna,
 
                 "search_plan": search_plan,
+
+                "offers": offers,
             },
         )
 
@@ -84,8 +130,12 @@ class SavvyCore:
         if request.user is None:
 
             request.user = UserContext(
-                region=self.config.default_region,
-                currency=self.config.default_currency,
+                region=(
+                    self.config.default_region
+                ),
+                currency=(
+                    self.config.default_currency
+                ),
             )
 
     def _parse_input(
@@ -94,16 +144,19 @@ class SavvyCore:
     ) -> dict:
 
         if request.url:
+
             return parse_url(
                 request.url
             )
 
         if request.image is not None:
+
             return parse_photo(
                 request.image
             )
 
         if request.text:
+
             return parse_text(
                 request.text
             )
