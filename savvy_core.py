@@ -1,798 +1,418 @@
-import json
-import os
 import re
 import sqlite3
-import time
-
-from dataclasses import dataclass
-from typing import Any, Optional
-
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
+from typing import Optional
 
 
-MODEL = os.getenv(
-    "OPENAI_MODEL",
-    "gpt-5.6-luna",
-)
-
-DB_PATH = os.getenv(
-    "DB_PATH",
-    "savvysense.db",
-)
+DB_NAME = "savvy.db"
 
 
 REGIONS = {
-    "BY": {
-        "name": "Беларусь",
-        "currency": "BYN",
-        "lang": "ru",
-        "hints": "Беларусь, Ozon BY, Wildberries BY, 21vek, Kufar",
-    },
-    "RU": {
-        "name": "Россия",
-        "currency": "RUB",
-        "lang": "ru",
-        "hints": "Ozon, Wildberries, Яндекс Маркет, Мегамаркет, Avito",
-    },
-    "KZ": {
-        "name": "Казахстан",
-        "currency": "KZT",
-        "lang": "ru",
-        "hints": "Kaspi, Wildberries Kazakhstan, Ozon Kazakhstan, Technodom, Sulpak",
-    },
-    "UZ": {
-        "name": "Узбекистан",
-        "currency": "UZS",
-        "lang": "ru",
-        "hints": "Uzum, Asaxiy и местные магазины",
-    },
-    "KG": {
-        "name": "Кыргызстан",
-        "currency": "KGS",
-        "lang": "ru",
-        "hints": "местные магазины и маркетплейсы Кыргызстана",
-    },
-    "AM": {
-        "name": "Армения",
-        "currency": "AMD",
-        "lang": "ru",
-        "hints": "местные магазины и маркетплейсы Армении",
-    },
-    "AZ": {
-        "name": "Азербайджан",
-        "currency": "AZN",
-        "lang": "ru",
-        "hints": "местные магазины и маркетплейсы Азербайджана",
-    },
-    "TJ": {
-        "name": "Таджикистан",
-        "currency": "TJS",
-        "lang": "ru",
-        "hints": "местные магазины и маркетплейсы Таджикистана",
-    },
-    "MD": {
-        "name": "Молдова",
-        "currency": "MDL",
-        "lang": "ru",
-        "hints": "999.md и местные магазины Молдовы",
-    },
+    "BY": "Беларусь",
+    "RU": "Россия",
+    "KZ": "Казахстан",
+    "UZ": "Узбекистан",
+    "KG": "Кыргызстан",
+    "AM": "Армения",
+    "AZ": "Азербайджан",
+    "TJ": "Таджикистан",
+    "MD": "Молдова",
 }
 
 
-@dataclass
-class UserProfile:
-    user_id: int
-    region: str = "BY"
-    currency: str = "BYN"
-    preferences: dict[str, Any] | None = None
+def get_db():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def db():
-    con = sqlite3.connect(
-        DB_PATH,
-        check_same_thread=False,
-    )
+def init_db():
+    conn = get_db()
 
-    con.execute(
+    conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
-            region TEXT,
-            currency TEXT,
-            preferences TEXT
+            region TEXT DEFAULT 'BY',
+            currency TEXT DEFAULT 'USD'
         )
         """
     )
 
-    con.execute(
+    conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS tracks (
+        CREATE TABLE IF NOT EXISTS preferences (
+            user_id INTEGER,
+            key TEXT,
+            value TEXT,
+            UNIQUE(user_id, key)
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            query TEXT,
-            created_at REAL
+            product TEXT,
+            target_price REAL,
+            currency TEXT,
+            active INTEGER DEFAULT 1
         )
         """
     )
 
-    con.commit()
+    conn.commit()
+    conn.close()
 
-    return con
 
+def ensure_user(user_id: int):
+    conn = get_db()
 
-def get_profile(
-    user_id: int,
-    language_code: Optional[str] = None,
-):
-    con = db()
-
-    row = con.execute(
+    conn.execute(
         """
-        SELECT region, currency, preferences
+        INSERT OR IGNORE INTO users
+        (user_id, region, currency)
+        VALUES (?, 'BY', 'USD')
+        """,
+        (user_id,),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_user(user_id: int):
+    ensure_user(user_id)
+
+    conn = get_db()
+
+    row = conn.execute(
+        """
+        SELECT *
         FROM users
-        WHERE user_id=?
+        WHERE user_id = ?
         """,
         (user_id,),
     ).fetchone()
 
-    if row:
-        try:
-            preferences = json.loads(
-                row[2] or "{}"
-            )
-        except Exception:
-            preferences = {}
+    conn.close()
 
-        con.close()
-
-        return UserProfile(
-            user_id,
-            row[0],
-            row[1],
-            preferences,
-        )
-
-    region = "BY"
-    currency = REGIONS[region]["currency"]
-
-    con.execute(
-        """
-        INSERT OR IGNORE INTO users
-        (user_id, region, currency, preferences)
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            user_id,
-            region,
-            currency,
-            "{}",
-        ),
-    )
-
-    con.commit()
-    con.close()
-
-    return UserProfile(
-        user_id,
-        region,
-        currency,
-        {},
-    )
+    return row
 
 
-def set_region(
-    user_id: int,
-    region: str,
-):
+def set_region(user_id: int, region: str):
     region = region.upper()
 
     if region not in REGIONS:
-        raise ValueError("unknown region")
+        raise ValueError("Unsupported region")
 
-    profile = get_profile(user_id)
+    ensure_user(user_id)
 
-    con = db()
+    conn = get_db()
 
-    con.execute(
+    conn.execute(
         """
         UPDATE users
-        SET region=?, currency=?, preferences=?
-        WHERE user_id=?
+        SET region = ?
+        WHERE user_id = ?
         """,
-        (
-            region,
-            REGIONS[region]["currency"],
-            json.dumps(
-                profile.preferences or {},
-                ensure_ascii=False,
-            ),
-            user_id,
-        ),
+        (region, user_id),
     )
 
-    con.commit()
-    con.close()
+    conn.commit()
+    conn.close()
 
 
-def save_preference(
-    user_id: int,
-    key: str,
-    value: Any,
-):
-    profile = get_profile(user_id)
+def get_region(user_id: int) -> str:
+    row = get_user(user_id)
+    return row["region"]
 
-    preferences = (
-        profile.preferences or {}
-    )
 
-    preferences[key] = value
+def remember(user_id: int, key: str, value: str):
+    ensure_user(user_id)
 
-    con = db()
+    conn = get_db()
 
-    con.execute(
+    conn.execute(
         """
-        UPDATE users
-        SET preferences=?
-        WHERE user_id=?
-        """,
-        (
-            json.dumps(
-                preferences,
-                ensure_ascii=False,
-            ),
-            user_id,
-        ),
-    )
-
-    con.commit()
-    con.close()
-
-
-def add_track(
-    user_id: int,
-    query: str,
-):
-    con = db()
-
-    con.execute(
-        """
-        INSERT INTO tracks
-        (user_id, query, created_at)
+        INSERT INTO preferences
+        (user_id, key, value)
         VALUES (?, ?, ?)
+        ON CONFLICT(user_id, key)
+        DO UPDATE SET value = excluded.value
         """,
-        (
-            user_id,
-            query,
-            time.time(),
-        ),
+        (user_id, key, value),
     )
 
-    con.commit()
-    con.close()
+    conn.commit()
+    conn.close()
 
 
-def list_tracks(user_id: int):
-    con = db()
+def get_preferences(user_id: int):
+    ensure_user(user_id)
 
-    rows = con.execute(
+    conn = get_db()
+
+    rows = conn.execute(
         """
-        SELECT query
-        FROM tracks
-        WHERE user_id=?
-        ORDER BY id DESC
-        LIMIT 20
+        SELECT key, value
+        FROM preferences
+        WHERE user_id = ?
         """,
         (user_id,),
     ).fetchall()
 
-    con.close()
+    conn.close()
 
-    return [
-        row[0]
-        for row in rows
-    ]
+    return {row["key"]: row["value"] for row in rows}
 
 
-def region_from_text(
-    text: str,
-    current: UserProfile,
+def add_tracking(
+    user_id: int,
+    product: str,
+    target_price: Optional[float] = None,
+    currency: str = "USD",
 ):
+    ensure_user(user_id)
+
+    conn = get_db()
+
+    conn.execute(
+        """
+        INSERT INTO tracking
+        (user_id, product, target_price, currency)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            product,
+            target_price,
+            currency,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_tracking(user_id: int):
+    ensure_user(user_id)
+
+    conn = get_db()
+
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM tracking
+        WHERE user_id = ?
+        AND active = 1
+        ORDER BY id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    conn.close()
+
+    return rows
+
+
+def region_from_text(text: str) -> Optional[str]:
+    if not text:
+        return None
+
     text = text.lower()
 
-    markers = {
-        "беларус": "BY",
-        "бел. руб": "BY",
-        "byn": "BY",
+    aliases = {
+        "беларусь": "BY",
+        "белоруссия": "BY",
+        "belarus": "BY",
 
-        "росси": "RU",
-        "рубл": "RU",
-        "rub": "RU",
+        "россия": "RU",
+        "российская федерация": "RU",
+        "russia": "RU",
 
         "казахстан": "KZ",
-        "тенге": "KZ",
-        "kzt": "KZ",
+        "kazakhstan": "KZ",
 
         "узбекистан": "UZ",
-        "сум": "UZ",
-        "uzs": "UZ",
+        "uzbekistan": "UZ",
 
-        "киргиз": "KG",
-        "кыргыз": "KG",
-        "сом": "KG",
-        "kgs": "KG",
+        "кыргызстан": "KG",
+        "киргизия": "KG",
+        "kyrgyzstan": "KG",
 
-        "армени": "AM",
-        "драм": "AM",
-        "amd": "AM",
+        "армения": "AM",
+        "armenia": "AM",
 
         "азербайджан": "AZ",
-        "манат": "AZ",
-        "azn": "AZ",
+        "azerbaijan": "AZ",
 
         "таджикистан": "TJ",
-        "сомони": "TJ",
-        "tjs": "TJ",
+        "tajikistan": "TJ",
 
         "молдова": "MD",
-        "mdl": "MD",
+        "moldova": "MD",
     }
 
-    for marker, code in markers.items():
-        if marker in text:
-            current.region = code
-            current.currency = REGIONS[
-                code
-            ]["currency"]
+    for name, code in aliases.items():
+        if name in text:
+            return code
 
-            return current
+    return None
 
-    return current
 
+def understand(text: str):
+    """
+    Базовое понимание запроса SAVVY.
 
-def parse_json(text: str):
-    text = text.strip()
+    Пока без OpenAI.
+    Позже сюда можно подключить отдельный AI-слой,
+    не ломая ядро.
+    """
 
-    match = re.search(
-        r"\{.*\}",
-        text,
-        re.S,
-    )
-
-    if not match:
-        return {}
-
-    try:
-        return json.loads(
-            match.group(0)
-        )
-    except Exception:
-        return {}
-
-
-def openai_client():
-    if OpenAI is None:
-        return None
-
-    key = os.getenv(
-        "OPENAI_API_KEY"
-    )
-
-    if not key:
-        return None
-
-    return OpenAI(api_key=key)
-
-
-def ask_ai(
-    query: str,
-    profile: UserProfile,
-    mode: str = "shop",
-):
-    client = openai_client()
-
-    if client is None:
-        return (
-            "❌ OPENAI_API_KEY не настроен.\n"
-            "Добавь его в Railway Variables."
-        )
-
-    region = REGIONS[
-        profile.region
-    ]
-
-    preferences = json.dumps(
-        profile.preferences or {},
-        ensure_ascii=False,
-    )
-
-    instructions = f"""
-Ты — SAVVY SENSE.
-
-Ты не обычный поисковик.
-Ты AI Shopping Decision Engine.
-
-Регион:
-{region["name"]} ({profile.region})
-
-Валюта:
-{profile.currency}
-
-Локальные источники:
-{region["hints"]}
-
-Память пользователя:
-{preferences}
-
-Главная задача:
-помочь человеку принять лучшее решение о покупке.
-
-ПРАВИЛА:
-
-1. Понимай обычный человеческий язык.
-
-2. Определи товар, модель, бренд,
-бюджет, валюту, цвет, размер,
-назначение и требования.
-
-3. Учитывай регион пользователя.
-
-4. Сначала ищи подходящие варианты
-в его регионе.
-
-5. Затем рассматривай другие страны СНГ.
-
-6. Затем рассматривай мировой рынок,
-если это выгодно или необходимо.
-
-7. Не выдумывай:
-цену, наличие, рейтинг,
-продавца или доставку.
-
-8. Отличай основной товар от:
-чехлов, кабелей, зарядок,
-запчастей и аксессуаров.
-
-9. Не выбирай товар только потому,
-что он дешевле.
-
-10. Учитывай:
-цену,
-доставку,
-качество,
-продавца,
-рейтинг,
-соответствие запросу,
-риск.
-
-11. Если полная стоимость неизвестна,
-честно напиши об этом.
-
-12. Не выдавай предположение
-за проверенный факт.
-
-13. Покажи максимум 5 хороших вариантов.
-
-14. Выбери один BEST CHOICE.
-
-15. Рассчитай SAVVY SCORE от 0 до 100.
-Это аналитическая оценка SAVVY,
-а не официальный рейтинг товара.
-
-16. Объясни пользователю,
-почему выбран именно этот вариант.
-
-17. Если есть риск —
-обязательно предупреди.
-
-18. Используй память пользователя,
-но никогда не придумывай личные данные.
-
-ФОРМАТ:
-
-🧠 SAVVY
-
-Коротко:
-что понял.
-
-🥇 BEST CHOICE
-
-Название
-Цена:
-Доставка:
-Итого:
-Продавец:
-SAVVY SCORE:
-Риск:
-Ссылка:
-
-Другие хорошие варианты:
-
-🥈 ...
-🥉 ...
-
-💡 Почему я выбрал BEST CHOICE
-
-⚠️ Что проверить перед покупкой
-"""
-
-    if mode == "analyze":
-        instructions += """
-Дополнительно:
-сделай BUY / WAIT вывод,
-плюсы и минусы товара.
-"""
-
-    if mode == "cheaper":
-        instructions += """
-Главная цель:
-найди более выгодные альтернативы
-с сохранением ключевых характеристик.
-"""
-
-    if mode == "compare":
-        instructions += """
-Главная цель:
-сравни варианты между собой
-и выбери победителя.
-"""
-
-    prompt = f"""
-Запрос пользователя:
-
-{query}
-
-Режим:
-{mode}
-
-Самостоятельно проведи поиск,
-анализируй результаты и дай
-практическую рекомендацию.
-"""
-
-    try:
-        response = client.responses.create(
-            model=MODEL,
-            instructions=instructions,
-            tools=[
-                {
-                    "type": "web_search_preview"
-                }
-            ],
-            input=prompt,
-            store=False,
-        )
-
-        return (
-            response.output_text
-            or "Не удалось получить результат."
-        ).strip()
-
-    except Exception as e:
-        print("AI ERROR:", e)
-
-        return (
-            "❌ SAVVY временно не смог "
-            "выполнить поиск.\n\n"
-            f"Техническая ошибка: {e}"
-        )
-
-
-def understand(
-    query: str,
-    profile: UserProfile,
-):
-    client = openai_client()
-
-    if client is None:
+    if not text:
         return {
-            "search_query": query,
-            "region": profile.region,
-            "currency": profile.currency,
-            "max_price": None,
+            "intent": "unknown",
+            "query": "",
         }
 
-    region = REGIONS[
-        profile.region
+    original = text.strip()
+    lowered = original.lower()
+
+    if lowered.startswith("/find"):
+        intent = "product_search"
+
+    elif lowered.startswith("/compare"):
+        intent = "compare"
+
+    elif lowered.startswith("/check"):
+        intent = "check"
+
+    elif lowered.startswith("/cheaper"):
+        intent = "cheaper"
+
+    elif lowered.startswith("/track"):
+        intent = "track"
+
+    elif lowered.startswith("/help"):
+        intent = "help"
+
+    else:
+        if any(
+            word in lowered
+            for word in [
+                "сравни",
+                "сравнить",
+                "compare",
+            ]
+        ):
+            intent = "compare"
+
+        elif any(
+            word in lowered
+            for word in [
+                "дешевле",
+                "дешевый",
+                "найди дешевле",
+                "cheaper",
+            ]
+        ):
+            intent = "cheaper"
+
+        elif any(
+            word in lowered
+            for word in [
+                "стоит ли",
+                "выгодно ли",
+                "покупать",
+                "worth",
+            ]
+        ):
+            intent = "check"
+
+        elif any(
+            word in lowered
+            for word in [
+                "следи",
+                "отслеживай",
+                "отследи",
+                "track",
+            ]
+        ):
+            intent = "track"
+
+        else:
+            intent = "product_search"
+
+    query = original
+
+    commands = [
+        "/find",
+        "/compare",
+        "/check",
+        "/cheaper",
+        "/track",
     ]
 
-    prompt = f"""
-Разбери shopping-запрос.
+    for command in commands:
+        if lowered.startswith(command):
+            query = original[len(command):].strip()
+            break
 
-Регион:
-{region["name"]}
+    budget = extract_budget(original)
 
-Валюта региона:
-{profile.currency}
+    region = region_from_text(original)
 
-Верни только JSON:
-
-{{
-"product": null,
-"brand": null,
-"model": null,
-"category": null,
-"color": null,
-"size": null,
-"max_price": null,
-"min_price": null,
-"currency": null,
-"accessory_requested": false,
-"search_query": "",
-"priorities": [],
-"confidence": 0.0
-}}
-
-КРИТИЧНО:
-
-Число в названии модели
-не является ценой.
-
-Например:
-
-"iPhone 15 до 800$"
-
-означает:
-
-model = "15"
-max_price = 800
-currency = "USD"
-
-Не придумывай валюту.
-
-Запрос:
-
-{query}
-"""
-
-    try:
-        response = client.responses.create(
-            model=MODEL,
-            instructions=(
-                "Ты parser shopping запросов. "
-                "Возвращай только JSON."
-            ),
-            input=prompt,
-            store=False,
-        )
-
-        return parse_json(
-            response.output_text
-        )
-
-    except Exception as e:
-        print(
-            "INTENT ERROR:",
-            e,
-        )
-
-        return {
-            "search_query": query,
-            "region": profile.region,
-            "currency": profile.currency,
-            "max_price": None,
-        }
+    return {
+        "intent": intent,
+        "query": query,
+        "budget": budget,
+        "region": region,
+    }
 
 
-def ask_ai_image(
-    image_url: str,
-    user_text: str,
-    profile: UserProfile,
-):
-    client = openai_client()
+def extract_budget(text: str):
+    if not text:
+        return None
 
-    if client is None:
-        return (
-            "❌ OPENAI_API_KEY не настроен."
-        )
-
-    region = REGIONS[
-        profile.region
+    patterns = [
+        r"до\s*\$?\s*(\d+(?:[.,]\d+)?)",
+        r"до\s*(\d+(?:[.,]\d+)?)\s*\$",
+        r"\$\s*(\d+(?:[.,]\d+)?)",
+        r"(\d+(?:[.,]\d+)?)\s*\$",
     ]
 
-    preferences = json.dumps(
-        profile.preferences or {},
-        ensure_ascii=False,
-    )
-
-    instructions = f"""
-Ты — SAVVY SENSE,
-AI Shopping Assistant.
-
-Регион:
-{region["name"]}
-
-Валюта:
-{profile.currency}
-
-Память:
-{preferences}
-
-Посмотри изображение.
-
-Определи:
-• что за товар
-• бренд
-• модель
-• категорию
-• цвет
-• основные характеристики
-
-Отделяй факты от предположений.
-
-После этого используй web search,
-чтобы найти актуальные варианты покупки.
-
-Ищи:
-1. регион пользователя
-2. СНГ
-3. мировой рынок
-
-Дай:
-
-🥇 BEST CHOICE
-
-3–5 вариантов.
-
-Для каждого:
-цена,
-доставка если известна,
-продавец,
-ссылка,
-SAVVY SCORE,
-риск.
-
-Если на фото аксессуар,
-не называй его основным товаром.
-"""
-
-    user_text = (
-        user_text
-        or
-        "Найди такой товар и лучшие "
-        "варианты покупки."
-    )
-
-    try:
-        response = client.responses.create(
-            model=MODEL,
-            instructions=instructions,
-            tools=[
-                {
-                    "type": "web_search_preview"
-                }
-            ],
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": user_text,
-                        },
-                        {
-                            "type": "input_image",
-                            "image_url": image_url,
-                        },
-                    ],
-                }
-            ],
-            store=False,
+    for pattern in patterns:
+        match = re.search(
+            pattern,
+            text.lower(),
         )
 
-        return (
-            response.output_text
-            or "Не удалось обработать изображение."
-        ).strip()
+        if match:
+            try:
+                return float(
+                    match.group(1).replace(",", ".")
+                )
+            except ValueError:
+                pass
 
-    except Exception as e:
-        print(
-            "PHOTO AI ERROR:",
-            e,
-        )
+    return None
 
-        return (
-            "❌ Не удалось обработать фото."
-        )
+
+def build_context(user_id: int):
+    user = get_user(user_id)
+
+    return {
+        "user_id": user_id,
+        "region": user["region"],
+        "currency": user["currency"],
+        "preferences": get_preferences(user_id),
+        "tracking": [
+            dict(row)
+            for row in get_tracking(user_id)
+        ],
+    }
+
+
+init_db()
