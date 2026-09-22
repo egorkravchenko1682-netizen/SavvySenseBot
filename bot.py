@@ -25,14 +25,12 @@ if not TOKEN:
     )
 
 
-# Создаём поисковый слой
 search_orchestrator = SearchOrchestrator(
     providers=[
         DemoSearchProvider(),
     ]
 )
 
-# Создаём ядро SAVVY
 engine = SavvyEngine(
     search_orchestrator
 )
@@ -54,7 +52,9 @@ async def start(
         "🔗 анализировать ссылки\n"
         "🧠 учитывать твои предпочтения\n"
         "⭐ выбирать лучший вариант\n"
-        "💡 помогать решить — покупать или подождать\n\
+        "💡 помогать решить — покупать или подождать\n\n"
+        "🌍 Регион: Беларусь (BY)\n"
+        "💱 Валюта: BYN\n\n"
         "Просто напиши:\n\n"
         "Нужен iPhone 15 до 800$"
     )
@@ -64,7 +64,6 @@ async def handle_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-
     if not update.message:
         return
 
@@ -78,8 +77,6 @@ async def handle_message(
 
     user_id = update.effective_user.id
 
-    # Пока используем временный профиль.
-    # Базу данных подключим следующим этапом.
     profile = UserProfile(
         user_id=user_id
     )
@@ -89,17 +86,13 @@ async def handle_message(
     )
 
     try:
-
         result = await engine.search(
             query=query,
             profile=profile,
         )
 
     except Exception as exc:
-
-        print(
-            f"[SAVVY ERROR] {exc}"
-        )
+        print(f"[SAVVY ERROR] {exc}")
 
         await update.message.reply_text(
             "⚠️ Произошла ошибка при обработке запроса."
@@ -108,11 +101,9 @@ async def handle_message(
         return
 
     if not result.offers:
-
         await update.message.reply_text(
             "😔 Подходящих предложений пока не найдено."
         )
-
         return
 
     request = result.request
@@ -126,7 +117,6 @@ async def handle_message(
     )
 
     if request.max_price is not None:
-
         response += (
             f"💰 Бюджет: до "
             f"{request.max_price:.2f} "
@@ -136,33 +126,26 @@ async def handle_message(
     response += "\n"
 
     if cheapest:
-
         response += (
             "💰 CHEAPEST\n"
             f"{cheapest.title}\n"
-            f"Цена: "
-            f"{cheapest.price:.2f} "
+            f"Цена: {cheapest.price:.2f} "
             f"{cheapest.currency}\n"
-            f"🚚 Доставка: "
-            f"{cheapest.shipping_cost:.2f} "
+            f"🚚 Доставка: {cheapest.shipping_cost:.2f} "
             f"{cheapest.currency}\n"
-            f"💵 REAL COST: "
-            f"{cheapest.real_cost:.2f} "
+            f"💵 REAL COST: {cheapest.real_cost:.2f} "
             f"{cheapest.currency}\n"
-            f"🏪 Продавец: "
-            f"{cheapest.seller}\n"
+            f"🏪 Продавец: {cheapest.seller}\n"
             f"⭐ Рейтинг: "
             f"{cheapest.seller_rating or 'нет данных'}\n"
             f"🔗 {cheapest.url}\n\n"
         )
 
     if best:
-
         response += (
             "🏆 BEST DEAL\n"
             f"{best.title}\n"
-            f"💵 REAL COST: "
-            f"{best.real_cost:.2f} "
+            f"💵 REAL COST: {best.real_cost:.2f} "
             f"{best.currency}\n"
             f"⭐ Рейтинг продавца: "
             f"{best.seller_rating or 'нет данных'}\n"
@@ -181,7 +164,6 @@ async def handle_message(
 
 
 def main():
-
     application = (
         Application.builder()
         .token(TOKEN)
