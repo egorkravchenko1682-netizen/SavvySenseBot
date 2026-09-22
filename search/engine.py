@@ -3,13 +3,11 @@ from typing import Any
 
 class GlobalSearchEngine:
     """
-    Центральный движок глобального поиска.
+    Центральный движок глобального поиска SAVVY SENSE.
 
-    Движок не знает деталей конкретных
-    маркетплейсов.
-
-    Каждый источник подключается
-    отдельным адаптером.
+    Каждый источник подключается отдельным адаптером.
+    Ошибка одного адаптера не должна останавливать
+    остальные источники.
     """
 
     def __init__(
@@ -19,6 +17,10 @@ class GlobalSearchEngine:
 
         self.adapters = adapters or []
 
+    # =========================
+    # ADD ADAPTER
+    # =========================
+
     def add_adapter(
         self,
         adapter: Any,
@@ -27,6 +29,10 @@ class GlobalSearchEngine:
         self.adapters.append(
             adapter
         )
+
+    # =========================
+    # SEARCH
+    # =========================
 
     def search(
         self,
@@ -40,25 +46,49 @@ class GlobalSearchEngine:
 
         for adapter in self.adapters:
 
+            adapter_name = getattr(
+                adapter,
+                "name",
+                "unknown",
+            )
+
             try:
 
                 offers = adapter.search(
                     queries=queries,
+
                     region=region,
+
                     currency=currency,
+
                     budget=budget,
                 )
 
                 if offers:
+
                     all_offers.extend(
                         offers
+                    )
+
+                    print(
+                        f"Search adapter "
+                        f"{adapter_name}: "
+                        f"{len(offers)} results"
+                    )
+
+                else:
+
+                    print(
+                        f"Search adapter "
+                        f"{adapter_name}: "
+                        f"0 results"
                     )
 
             except Exception as error:
 
                 print(
                     f"Search adapter "
-                    f"{getattr(adapter, 'name', 'unknown')} "
+                    f"{adapter_name} "
                     f"failed: {error}"
                 )
 
