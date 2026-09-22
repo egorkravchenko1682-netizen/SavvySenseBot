@@ -26,6 +26,12 @@ from search.adapters import DemoAdapter
 
 from offer import normalize_offers
 
+from currency import CurrencyConverter
+
+from cost.calculator import (
+    calculate_offers_real_cost,
+)
+
 
 class SavvyCore:
 
@@ -44,6 +50,10 @@ class SavvyCore:
 
         self.search_engine.add_adapter(
             DemoAdapter()
+        )
+
+        self.currency_converter = (
+            CurrencyConverter()
         )
 
     def process(
@@ -107,6 +117,18 @@ class SavvyCore:
 
         offers = normalize_offers(
             raw_offers
+        )
+
+        offers = calculate_offers_real_cost(
+            offers=offers,
+
+            target_currency=(
+                request.user.currency
+            ),
+
+            converter=(
+                self.currency_converter
+            ),
         )
 
         return SavvyResponse(
