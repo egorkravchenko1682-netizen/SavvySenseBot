@@ -10,7 +10,7 @@ class OfferExtractor:
     """
     Универсальный extractor товарных страниц.
 
-    Пытается получить:
+    Извлекает:
     - название;
     - бренд;
     - цену;
@@ -18,13 +18,8 @@ class OfferExtractor:
     - описание;
     - изображение;
     - продавца;
-    - наличие.
-
-    Основной источник:
-    JSON-LD / schema.org Product и Offer.
-
-    Дополнительный источник:
-    OpenGraph и HTML meta.
+    - наличие;
+    - конечный URL.
     """
 
     name = "offer_extractor"
@@ -49,7 +44,6 @@ class OfferExtractor:
             )
 
         try:
-
             response = requests.get(
                 url,
                 headers=self._headers(),
@@ -102,9 +96,7 @@ class OfferExtractor:
                     "og:description",
                 )
                 or self._clean(
-                    fallback.get(
-                        "description"
-                    )
+                    fallback.get("description")
                 )
             )
 
@@ -151,29 +143,24 @@ class OfferExtractor:
             )
 
             if not image:
-
                 image = self._meta(
                     soup,
                     "og:image",
                 )
 
-            domain = (
-                urlparse(
-                    final_url
-                ).netloc
-            )
+            domain = urlparse(
+                final_url
+            ).netloc
 
             return {
                 "title": title,
                 "brand": brand,
                 "price": price,
                 "currency": currency,
-                "description":
-                    description,
+                "description": description,
                 "image": image,
                 "seller": seller,
-                "availability":
-                    availability,
+                "availability": availability,
                 "url": final_url,
                 "domain": domain,
                 "extracted": True,
@@ -190,10 +177,6 @@ class OfferExtractor:
                 fallback,
                 url=url,
             )
-
-    # =========================
-    # HTTP
-    # =========================
 
     @staticmethod
     def _headers():
@@ -215,10 +198,6 @@ class OfferExtractor:
                 "*/*;q=0.8",
         }
 
-    # =========================
-    # JSON-LD
-    # =========================
-
     def _extract_json_ld(
         self,
         soup: BeautifulSoup,
@@ -236,45 +215,34 @@ class OfferExtractor:
             raw = script.string
 
             if not raw:
-
                 raw = script.get_text(
                     strip=True
                 )
 
             if not raw:
-
                 continue
 
             try:
-
                 data = json.loads(
                     raw
                 )
 
             except Exception:
-
                 continue
 
             if isinstance(
                 data,
                 list,
             ):
-
                 results.extend(
                     data
                 )
-
             else:
-
                 results.append(
                     data
                 )
 
         return results
-
-    # =========================
-    # PRODUCT
-    # =========================
 
     def _find_product(
         self,
@@ -283,12 +251,13 @@ class OfferExtractor:
 
         for item in data:
 
-            found = self._find_product_recursive(
-                item
+            found = (
+                self._find_product_recursive(
+                    item
+                )
             )
 
             if found:
-
                 return found
 
         return {}
@@ -329,7 +298,6 @@ class OfferExtractor:
                 "product" in types
                 or "productgroup" in types
             ):
-
                 return item
 
             graph = item.get(
@@ -350,7 +318,6 @@ class OfferExtractor:
                     )
 
                     if found:
-
                         return found
 
             for value in item.values():
@@ -362,7 +329,6 @@ class OfferExtractor:
                 )
 
                 if found:
-
                     return found
 
         elif isinstance(
@@ -379,14 +345,9 @@ class OfferExtractor:
                 )
 
                 if found:
-
                     return found
 
         return {}
-
-    # =========================
-    # OFFER
-    # =========================
 
     def _find_offer(
         self,
@@ -401,7 +362,6 @@ class OfferExtractor:
             offers,
             dict,
         ):
-
             return offers
 
         if isinstance(
@@ -415,14 +375,9 @@ class OfferExtractor:
                     offer,
                     dict,
                 ):
-
                     return offer
 
         return {}
-
-    # =========================
-    # PRICE
-    # =========================
 
     def _extract_price(
         self,
@@ -430,7 +385,6 @@ class OfferExtractor:
     ):
 
         if not offer:
-
             return None
 
         price = offer.get(
@@ -438,29 +392,22 @@ class OfferExtractor:
         )
 
         if price is None:
-
             price = offer.get(
                 "lowPrice"
             )
 
         if price is None:
-
             price = offer.get(
                 "highPrice"
             )
 
         if price is None:
-
             return None
 
         try:
-
             return float(
                 str(price)
-                .replace(
-                    ",",
-                    ".",
-                )
+                .replace(",", ".")
                 .strip()
             )
 
@@ -468,12 +415,7 @@ class OfferExtractor:
             TypeError,
             ValueError,
         ):
-
             return None
-
-    # =========================
-    # BRAND
-    # =========================
 
     def _extract_brand(
         self,
@@ -489,19 +431,13 @@ class OfferExtractor:
             dict,
         ):
 
-            return (
-                self._clean(
-                    brand.get("name")
-                )
+            return self._clean(
+                brand.get("name")
             )
 
         return self._clean(
             brand
         )
-
-    # =========================
-    # SELLER
-    # =========================
 
     def _extract_seller(
         self,
@@ -517,19 +453,13 @@ class OfferExtractor:
             dict,
         ):
 
-            return (
-                self._clean(
-                    seller.get("name")
-                )
+            return self._clean(
+                seller.get("name")
             )
 
         return self._clean(
             seller
         )
-
-    # =========================
-    # IMAGE
-    # =========================
 
     def _extract_image(
         self,
@@ -546,7 +476,6 @@ class OfferExtractor:
         ):
 
             if image:
-
                 return image[0]
 
             return None
@@ -562,10 +491,6 @@ class OfferExtractor:
             )
 
         return image
-
-    # =========================
-    # META
-    # =========================
 
     @staticmethod
     def _meta(
@@ -592,18 +517,11 @@ class OfferExtractor:
             )
 
         if not element:
-
             return None
 
-        return (
-            element.get(
-                "content"
-            )
+        return element.get(
+            "content"
         )
-
-    # =========================
-    # CURRENCY
-    # =========================
 
     def _extract_meta_currency(
         self,
@@ -623,14 +541,9 @@ class OfferExtractor:
             )
 
             if value:
-
                 return value.strip().upper()
 
         return None
-
-    # =========================
-    # CLEAN
-    # =========================
 
     @staticmethod
     def _clean(
@@ -638,7 +551,6 @@ class OfferExtractor:
     ):
 
         if value is None:
-
             return None
 
         if isinstance(
@@ -654,10 +566,6 @@ class OfferExtractor:
             value
         ).strip() or None
 
-    # =========================
-    # FALLBACK
-    # =========================
-
     @staticmethod
     def _fallback_result(
         fallback: dict[str, Any],
@@ -666,39 +574,25 @@ class OfferExtractor:
 
         return {
             "title":
-                fallback.get(
-                    "title"
-                ),
+                fallback.get("title"),
 
             "brand":
-                fallback.get(
-                    "brand"
-                ),
+                fallback.get("brand"),
 
             "price":
-                fallback.get(
-                    "price"
-                ),
+                fallback.get("price"),
 
             "currency":
-                fallback.get(
-                    "currency"
-                ),
+                fallback.get("currency"),
 
             "description":
-                fallback.get(
-                    "description"
-                ),
+                fallback.get("description"),
 
             "image":
-                fallback.get(
-                    "image"
-                ),
+                fallback.get("image"),
 
             "seller":
-                fallback.get(
-                    "seller"
-                ),
+                fallback.get("seller"),
 
             "availability":
                 fallback.get(
@@ -708,14 +602,10 @@ class OfferExtractor:
 
             "url":
                 url
-                or fallback.get(
-                    "url"
-                ),
+                or fallback.get("url"),
 
             "domain":
-                fallback.get(
-                    "domain"
-                ),
+                fallback.get("domain"),
 
             "extracted":
                 False,
