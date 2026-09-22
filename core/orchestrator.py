@@ -61,6 +61,7 @@ class SavvyCore:
         return SavvyResponse(
             success=True,
             intent=intent,
+
             data={
                 "region": request.user.region,
                 "currency": request.user.currency,
@@ -81,6 +82,7 @@ class SavvyCore:
     ):
 
         if request.user is None:
+
             request.user = UserContext(
                 region=self.config.default_region,
                 currency=self.config.default_currency,
@@ -92,13 +94,19 @@ class SavvyCore:
     ) -> dict:
 
         if request.url:
-            return parse_url(request.url)
+            return parse_url(
+                request.url
+            )
 
         if request.image is not None:
-            return parse_photo(request.image)
+            return parse_photo(
+                request.image
+            )
 
         if request.text:
-            return parse_text(request.text)
+            return parse_text(
+                request.text
+            )
 
         return {
             "type": "unknown",
