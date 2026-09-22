@@ -40,6 +40,71 @@ savvy = SavvyCore()
 
 
 # =========================
+# FORMAT HELPERS
+# =========================
+
+def format_money(
+    value,
+    currency="USD",
+):
+    """
+    Безопасное форматирование денежных значений.
+
+    None -> неизвестно
+    число -> 2 знака после запятой
+    """
+
+    if value is None:
+
+        return "неизвестно"
+
+    try:
+
+        return (
+            f"{float(value):.2f} "
+            f"{currency}"
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return "неизвестно"
+
+
+def format_price(
+    value,
+    currency="USD",
+):
+    """
+    Форматирование цены.
+
+    Используется отдельно, чтобы
+    неизвестная цена отображалась
+    как 'неизвестна'.
+    """
+
+    if value is None:
+
+        return "неизвестна"
+
+    try:
+
+        return (
+            f"{float(value):.2f} "
+            f"{currency}"
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return "неизвестна"
+
+
+# =========================
 # START
 # =========================
 
@@ -406,14 +471,24 @@ def handle_text(message):
     # BUDGET
     # =========================
 
-    if product.get(
+    budget = product.get(
         "budget"
-    ) is not None:
+    )
+
+    if budget is not None:
 
         lines.append(
             f"💰 Бюджет: "
-            f"{product['budget']:.2f} "
-            f"{product.get('currency', '')}"
+            f"{format_money(
+                budget,
+                product.get(
+                    "currency",
+                    response.data.get(
+                        "currency",
+                        "USD",
+                    ),
+                ),
+            )}"
         )
 
     # =========================
@@ -568,6 +643,16 @@ def handle_text(message):
             )
         )
 
+        best_currency = (
+            best_exact.get(
+                "total_currency"
+            )
+            or response.data.get(
+                "currency",
+                "USD",
+            )
+        )
+
         lines.extend(
             [
 
@@ -582,8 +667,12 @@ def handle_text(message):
                 f"{best_exact.get('source', '—')}",
 
                 f"💰 TOTAL COST: "
-                f"{best_exact.get('total_cost', 0):.2f} "
-                f"{best_exact.get('total_currency', response.data.get('currency', 'USD'))}",
+                f"{format_money(
+                    best_exact.get(
+                        "total_cost"
+                    ),
+                    best_currency,
+                )}",
 
                 f"👤 Продавец: "
                 f"{best_exact.get('seller', '—')}",
@@ -611,6 +700,7 @@ def handle_text(message):
                     "currency",
                     "USD",
                 )
+                or "USD"
             )
 
             total_currency = (
@@ -620,6 +710,10 @@ def handle_text(message):
                         "currency",
                         "USD",
                     ),
+                )
+                or response.data.get(
+                    "currency",
+                    "USD",
                 )
             )
 
@@ -670,28 +764,42 @@ def handle_text(message):
                     f"{offer.get('source', '—')}",
 
                     f"💰 Цена: "
-                    f"{offer.get('price', 0):.2f} "
-                    f"{source_currency}",
+                    f"{format_price(
+                        offer.get('price'),
+                        source_currency,
+                    )}",
 
                     f"🚚 Доставка: "
-                    f"{offer.get('delivery', 0):.2f} "
-                    f"{source_currency}",
+                    f"{format_money(
+                        offer.get('delivery'),
+                        source_currency,
+                    )}",
 
                     f"🧾 Налоги: "
-                    f"{offer.get('taxes', 0):.2f} "
-                    f"{source_currency}",
+                    f"{format_money(
+                        offer.get('taxes'),
+                        source_currency,
+                    )}",
 
                     f"📦 Пошлины: "
-                    f"{offer.get('duties', 0):.2f} "
-                    f"{source_currency}",
+                    f"{format_money(
+                        offer.get('duties'),
+                        source_currency,
+                    )}",
 
                     f"💳 Комиссии: "
-                    f"{offer.get('fees', 0):.2f} "
-                    f"{source_currency}",
+                    f"{format_money(
+                        offer.get('fees'),
+                        source_currency,
+                    )}",
 
                     f"💰 TOTAL COST: "
-                    f"{offer.get('total_cost', 0):.2f} "
-                    f"{total_currency}",
+                    f"{format_money(
+                        offer.get(
+                            'total_cost'
+                        ),
+                        total_currency,
+                    )}",
 
                     f"👤 Продавец: "
                     f"{offer.get('seller', '—')}",
