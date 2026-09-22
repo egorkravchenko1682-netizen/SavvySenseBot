@@ -55,16 +55,16 @@ class EbayProvider:
 
                 return result["access_token"]
 
-    async def search(
-    self,
-    request: SearchRequest,
-) -> list[Offer]:
+        async def search(
+        self,
+        request: SearchRequest,
+    ) -> list[Offer]:
 
-    print(
-        f"[SAVVY] eBay search: {request.original_query}"
-    )
+        print(
+            f"[SAVVY] eBay search: {request.original_query}"
+        )
 
-    token = await self.get_token()
+        token = await self.get_token()
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
