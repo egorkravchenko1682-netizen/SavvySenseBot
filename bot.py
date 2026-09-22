@@ -2,54 +2,34 @@ import os
 
 import telebot
 
-from savvy_core import (
-    REGIONS,
-    add_tracking,
-    build_context,
-    get_preferences,
-    get_region,
-    get_tracking,
-    init_db,
-    remember,
-    set_region,
-    understand,
-)
+from core import SavvyCore
+from core.models import SavvyRequest, UserContext
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise RuntimeError(
-        "BOT_TOKEN environment variable is not set"
-    )
+    raise RuntimeError("BOT_TOKEN is not set")
 
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-init_db()
+savvy = SavvyCore()
 
 
 @bot.message_handler(commands=["start"])
-def start(message):
-    user_id = message.from_user.id
-
+def start_command(message):
     text = (
         "🧠 SAVVY SENSE\n\n"
-        "Твой AI-помощник для умных покупок.\n\n"
         "🌎 Ищу товары по всему миру.\n\n"
-        "Отправь:\n"
+        "Отправь мне:\n"
+        "• название товара\n"
         "• ссылку на товар\n"
-        "• описание товара\n"
         "• фотографию товара\n\n"
-        "Основные команды:\n"
-        "/find — найти товар\n"
-        "/compare — сравнить\n"
-        "/check — стоит ли покупать\n"
-        "/cheaper — найти дешевле\n"
-        "/track — отслеживать цену\n"
-        "/region — регион доставки\n"
-        "/remember — сохранить предпочтение\n"
-        "/help — помощь"
+        "Примеры:\n"
+        "«Нужен iPhone до 800$»\n"
+        "«Найди дешевле»\n"
+        "«Сравни эти товары»"
     )
 
     bot.send_message(
@@ -60,247 +40,151 @@ def start(message):
 
 @bot.message_handler(commands=["help"])
 def help_command(message):
-    bot.send_message(
-        message.chat.id,
-        (
-            "🧠 SAVVY SENSE\n\n"
-            "/find — найти товар\n"
-            "/compare — сравнить товары\n"
-            "/check — проверить покупку\n"
-            "/cheaper — найти дешевле\n"
-            "/track — отслеживать цену\n"
-            "/region — изменить регион\n"
-            "/remember — сохранить предпочтение\n\n"
-            "Также можно просто написать запрос "
-            "обычным текстом."
-        ),
-    )
-
-
-@bot.message_handler(commands=["region"])
-def region_command(message):
-    user_id = message.from_user.id
-
-    current = get_region(user_id)
-
-    regions_text = "\n".join(
-        f"{code} — {name}"
-        for code, name in REGIONS.items()
+    text = (
+        "🧠 SAVVY SENSE — команды\n\n"
+        "/start — запустить SAVVY\n"
+        "/find — найти товар\n"
+        "/compare — сравнить товары\n"
+        "/check — проверить, стоит ли покупать\n"
+        "/cheaper — найти дешевле\n"
+        "/track — отслеживать цену\n"
+        "/help — помощь\n\n"
+        "Также можно просто отправить название товара, "
+        "ссылку или фотографию."
     )
 
     bot.send_message(
         message.chat.id,
-        (
-            f"🌍 Текущий регион: {current}\n\n"
-            f"Доступные регионы:\n{regions_text}\n\n"
-            "Чтобы изменить регион, отправь:\n"
-            "/region BY"
-        ),
-    )
-
-
-@bot.message_handler(
-    func=lambda message: (
-        message.text or ""
-    ).lower().startswith("/region ")
-)
-def set_region_command(message):
-    user_id = message.from_user.id
-
-    parts = message.text.split()
-
-    if len(parts) < 2:
-        bot.send_message(
-            message.chat.id,
-            "Пример: /region BY",
-        )
-        return
-
-    region = parts[1].upper()
-
-    try:
-        set_region(
-            user_id,
-            region,
-        )
-
-        bot.send_message(
-            message.chat.id,
-            (
-                f"🌍 Регион изменён: "
-                f"{REGIONS[region]} ({region})"
-            ),
-        )
-
-    except ValueError:
-        bot.send_message(
-            message.chat.id,
-            "Неизвестный регион.",
-        )
-
-
-@bot.message_handler(commands=["remember"])
-def remember_command(message):
-    text = message.text or ""
-
-    parts = text.split(maxsplit=2)
-
-    if len(parts) < 3:
-        bot.send_message(
-            message.chat.id,
-            (
-                "Использование:\n"
-                "/remember ключ значение\n\n"
-                "Например:\n"
-                "/remember brand Nike"
-            ),
-        )
-        return
-
-    key = parts[1]
-    value = parts[2]
-
-    remember(
-        message.from_user.id,
-        key,
-        value,
-    )
-
-    bot.send_message(
-        message.chat.id,
-        f"🧠 Запомнил:\n{key} = {value}",
-    )
-
-
-@bot.message_handler(commands=["track"])
-def track_command(message):
-    text = message.text or ""
-
-    query = text[len("/track"):].strip()
-
-    if not query:
-        bot.send_message(
-            message.chat.id,
-            (
-                "Напиши товар для отслеживания.\n\n"
-                "Например:\n"
-                "/track iPhone 16 Pro"
-            ),
-        )
-        return
-
-    add_tracking(
-        user_id=message.from_user.id,
-        product=query,
-    )
-
-    bot.send_message(
-        message.chat.id,
-        (
-            "🔔 Товар добавлен в отслеживание:\n\n"
-            f"{query}"
-        ),
+        text,
     )
 
 
 @bot.message_handler(commands=["find"])
 def find_command(message):
-    process_text(
-        message,
-        message.text,
+    bot.send_message(
+        message.chat.id,
+        "🔎 Напиши, какой товар нужно найти.",
     )
 
 
 @bot.message_handler(commands=["compare"])
 def compare_command(message):
-    process_text(
-        message,
-        message.text,
+    bot.send_message(
+        message.chat.id,
+        "⚖️ Отправь товары или ссылки, которые нужно сравнить.",
     )
 
 
 @bot.message_handler(commands=["check"])
 def check_command(message):
-    process_text(
-        message,
-        message.text,
+    bot.send_message(
+        message.chat.id,
+        "💰 Отправь ссылку или описание товара.",
     )
 
 
 @bot.message_handler(commands=["cheaper"])
 def cheaper_command(message):
-    process_text(
-        message,
-        message.text,
+    bot.send_message(
+        message.chat.id,
+        "🔎 Отправь ссылку или название товара — попробуем найти дешевле.",
     )
 
 
-def process_text(message, text):
-    user_id = message.from_user.id
-
-    result = understand(text)
-
-    context = build_context(user_id)
-
-    response = (
-        "🧠 SAVVY SENSE\n\n"
-        f"🔎 Запрос: {result['query']}\n"
-        f"🎯 Intent: {result['intent']}\n"
-        f"🌍 Регион: {context['region']}\n"
-        f"💱 Валюта: {context['currency']}"
+@bot.message_handler(commands=["track"])
+def track_command(message):
+    bot.send_message(
+        message.chat.id,
+        "📉 Отправь ссылку на товар, который нужно отслеживать.",
     )
 
-    if result.get("budget") is not None:
-        response += (
-            f"\n💰 Бюджет: "
-            f"до {result['budget']:.2f}"
+
+@bot.message_handler(content_types=["photo"])
+def handle_photo(message):
+    user = UserContext(
+        user_id=message.from_user.id,
+    )
+
+    request = SavvyRequest(
+        image=message.photo[-1],
+        user=user,
+    )
+
+    response = savvy.process(request)
+
+    if not response.success:
+        bot.send_message(
+            message.chat.id,
+            f"❌ {response.error or 'Не удалось обработать запрос.'}",
         )
-
-    response += (
-        "\n\n"
-        "⚙️ Запрос принят ядром SAVVY.\n"
-        "🔧 Поисковый модуль будет подключён "
-        "следующим блоком."
-    )
-
-    bot.send_message(
-        message.chat.id,
-        response,
-    )
-
-
-@bot.message_handler(
-    content_types=["photo"]
-)
-def photo_handler(message):
-    bot.send_message(
-        message.chat.id,
-        (
-            "📷 Фото получено.\n\n"
-            "SAVVY сохранил входной тип "
-            "запроса.\n\n"
-            "Модуль определения товара по фото "
-            "подключим следующим блоком."
-        ),
-    )
-
-
-@bot.message_handler(
-    content_types=["text"]
-)
-def text_handler(message):
-    if message.text.startswith("/"):
         return
 
-    process_text(
-        message,
-        message.text,
+    bot.send_message(
+        message.chat.id,
+        "📷 Фото получено.\n\n"
+        "Модуль поиска по фотографии будет подключён "
+        "на следующем этапе.",
+    )
+
+
+@bot.message_handler(content_types=["text"])
+def handle_text(message):
+    text = message.text.strip()
+
+    if not text:
+        return
+
+    user = UserContext(
+        user_id=message.from_user.id,
+    )
+
+    request = SavvyRequest(
+        text=text,
+        user=user,
+    )
+
+    response = savvy.process(request)
+
+    if not response.success:
+        bot.send_message(
+            message.chat.id,
+            f"❌ {response.error or 'Ошибка обработки запроса.'}",
+        )
+        return
+
+    intent = response.intent
+
+    if intent == "compare":
+        prefix = "⚖️ Запрос на сравнение принят."
+    elif intent == "cheaper":
+        prefix = "💰 Запрос на поиск дешевле принят."
+    elif intent == "check":
+        prefix = "🔎 Запрос на проверку товара принят."
+    elif intent == "track":
+        prefix = "📉 Запрос на отслеживание принят."
+    else:
+        prefix = "🔎 Запрос на поиск товара принят."
+
+    bot.send_message(
+        message.chat.id,
+        f"{prefix}\n\n"
+        f"🌍 Регион: {response.data.get('region')}\n"
+        f"💱 Валюта: {response.data.get('currency')}\n\n"
+        "Следующий модуль подключит настоящий поиск "
+        "по магазинам и маркетплейсам.",
+    )
+
+
+@bot.message_handler(content_types=["document"])
+def handle_document(message):
+    bot.send_message(
+        message.chat.id,
+        "📄 Этот тип файла пока не поддерживается.",
     )
 
 
 if __name__ == "__main__":
-    print("🧠 SAVVY SENSE started")
-
+    print("🧠 SAVVY SENSE is starting...")
     bot.infinity_polling(
-        skip_pending=True
+        skip_pending=True,
     )
