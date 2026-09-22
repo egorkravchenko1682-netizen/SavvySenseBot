@@ -1,0 +1,1 @@
+# SAVVY SENSE core
