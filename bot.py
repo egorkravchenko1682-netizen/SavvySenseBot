@@ -3,16 +3,26 @@ import os
 import telebot
 
 from core import SavvyCore
-from core.models import SavvyRequest, UserContext
+from core.models import (
+    SavvyRequest,
+    UserContext,
+)
 
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+BOT_TOKEN = os.getenv(
+    "BOT_TOKEN",
+    ""
+).strip()
 
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set")
+    raise RuntimeError(
+        "BOT_TOKEN is not set"
+    )
 
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(
+    BOT_TOKEN
+)
 
 savvy = SavvyCore()
 
@@ -21,7 +31,9 @@ savvy = SavvyCore()
 # START
 # =========================
 
-@bot.message_handler(commands=["start"])
+@bot.message_handler(
+    commands=["start"]
+)
 def start_command(message):
 
     bot.send_message(
@@ -39,7 +51,9 @@ def start_command(message):
 # HELP
 # =========================
 
-@bot.message_handler(commands=["help"])
+@bot.message_handler(
+    commands=["help"]
+)
 def help_command(message):
 
     bot.send_message(
@@ -59,7 +73,9 @@ def help_command(message):
 # FIND
 # =========================
 
-@bot.message_handler(commands=["find"])
+@bot.message_handler(
+    commands=["find"]
+)
 def find_command(message):
 
     bot.send_message(
@@ -72,7 +88,9 @@ def find_command(message):
 # COMPARE
 # =========================
 
-@bot.message_handler(commands=["compare"])
+@bot.message_handler(
+    commands=["compare"]
+)
 def compare_command(message):
 
     bot.send_message(
@@ -85,7 +103,9 @@ def compare_command(message):
 # CHECK
 # =========================
 
-@bot.message_handler(commands=["check"])
+@bot.message_handler(
+    commands=["check"]
+)
 def check_command(message):
 
     bot.send_message(
@@ -98,7 +118,9 @@ def check_command(message):
 # CHEAPER
 # =========================
 
-@bot.message_handler(commands=["cheaper"])
+@bot.message_handler(
+    commands=["cheaper"]
+)
 def cheaper_command(message):
 
     bot.send_message(
@@ -111,7 +133,9 @@ def cheaper_command(message):
 # TRACK
 # =========================
 
-@bot.message_handler(commands=["track"])
+@bot.message_handler(
+    commands=["track"]
+)
 def track_command(message):
 
     bot.send_message(
@@ -124,7 +148,9 @@ def track_command(message):
 # PHOTO
 # =========================
 
-@bot.message_handler(content_types=["photo"])
+@bot.message_handler(
+    content_types=["photo"]
+)
 def handle_photo(message):
 
     user = UserContext(
@@ -136,7 +162,9 @@ def handle_photo(message):
         user=user,
     )
 
-    response = savvy.process(request)
+    response = savvy.process(
+        request
+    )
 
     if not response.success:
 
@@ -160,7 +188,9 @@ def handle_photo(message):
 # TEXT
 # =========================
 
-@bot.message_handler(content_types=["text"])
+@bot.message_handler(
+    content_types=["text"]
+)
 def handle_text(message):
 
     text = message.text.strip()
@@ -177,7 +207,9 @@ def handle_text(message):
         user=user,
     )
 
-    response = savvy.process(request)
+    response = savvy.process(
+        request
+    )
 
     if not response.success:
 
@@ -396,7 +428,7 @@ def handle_text(message):
     )
 
     # =========================
-    # NORMALIZED OFFERS
+    # OFFERS
     # =========================
 
     if offers:
@@ -409,6 +441,23 @@ def handle_text(message):
             product_data = offer.get(
                 "product",
                 {},
+            )
+
+            source_currency = (
+                offer.get(
+                    "currency",
+                    "USD",
+                )
+            )
+
+            total_currency = (
+                offer.get(
+                    "total_currency",
+                    response.data.get(
+                        "currency",
+                        "USD",
+                    ),
+                )
             )
 
             lines.extend(
@@ -425,28 +474,28 @@ def handle_text(message):
                     f"{offer.get('source', '—')}",
 
                     f"💰 Цена: "
-                    f"{offer.get('price', '—')} "
-                    f"{offer.get('currency', '')}",
+                    f"{offer.get('price', 0):.2f} "
+                    f"{source_currency}",
 
                     f"🚚 Доставка: "
                     f"{offer.get('delivery', 0):.2f} "
-                    f"{offer.get('currency', '')}",
+                    f"{source_currency}",
 
                     f"🧾 Налоги: "
                     f"{offer.get('taxes', 0):.2f} "
-                    f"{offer.get('currency', '')}",
+                    f"{source_currency}",
 
                     f"📦 Пошлины: "
                     f"{offer.get('duties', 0):.2f} "
-                    f"{offer.get('currency', '')}",
+                    f"{source_currency}",
 
                     f"💳 Комиссии: "
                     f"{offer.get('fees', 0):.2f} "
-                    f"{offer.get('currency', '')}",
+                    f"{source_currency}",
 
                     f"💰 TOTAL COST: "
                     f"{offer.get('total_cost', 0):.2f} "
-                    f"{offer.get('currency', '')}",
+                    f"{total_currency}",
 
                     f"👤 Продавец: "
                     f"{offer.get('seller', '—')}",
@@ -456,15 +505,11 @@ def handle_text(message):
 
                     f"🌍 Регион: "
                     f"{offer.get('region', '—')}",
+
+                    f"📋 Доступность: "
+                    f"{offer.get('availability', 'unknown')}",
                 ]
             )
-
-            if offer.get("availability"):
-
-                lines.append(
-                    f"📋 Доступность: "
-                    f"{offer.get('availability')}"
-                )
 
             if offer.get("url"):
 
@@ -484,7 +529,7 @@ def handle_text(message):
         )
 
     # =========================
-    # SEND
+    # SEND RESULT
     # =========================
 
     bot.send_message(
