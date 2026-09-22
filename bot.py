@@ -240,6 +240,11 @@ def handle_text(message):
         [],
     )
 
+    deal_analysis = response.data.get(
+        "deal_analysis",
+        {},
+    )
+
     intent = response.intent
 
     intent_names = {
@@ -428,6 +433,66 @@ def handle_text(message):
     )
 
     # =========================
+    # DEAL ENGINE
+    # =========================
+
+    counts = deal_analysis.get(
+        "counts",
+        {},
+    )
+
+    best_exact = deal_analysis.get(
+        "best_exact"
+    )
+
+    lines.extend(
+        [
+
+            "",
+
+            "🧠 DEAL ENGINE",
+
+            f"🎯 Exact matches: "
+            f"{counts.get('exact', 0)}",
+
+            f"🔄 Similar: "
+            f"{counts.get('similar', 0)}",
+
+            f"⚠️ Over budget: "
+            f"{counts.get('over_budget', 0)}",
+        ]
+    )
+
+    if best_exact:
+
+        best_product = best_exact.get(
+            "product",
+            {},
+        )
+
+        lines.extend(
+            [
+
+                "",
+
+                "🏆 BEST EXACT MATCH",
+
+                f"Товар: "
+                f"{best_product.get('title', '—')}",
+
+                f"🏪 Источник: "
+                f"{best_exact.get('source', '—')}",
+
+                f"💰 TOTAL COST: "
+                f"{best_exact.get('total_cost', 0):.2f} "
+                f"{best_exact.get('total_currency', response.data.get('currency', 'USD'))}",
+
+                f"👤 Продавец: "
+                f"{best_exact.get('seller', '—')}",
+            ]
+        )
+
+    # =========================
     # OFFERS
     # =========================
 
@@ -460,12 +525,31 @@ def handle_text(message):
                 )
             )
 
+            match_type = offer.get(
+                "match_type",
+                "unknown",
+            )
+
+            if match_type == "exact":
+
+                match_label = (
+                    "🎯 EXACT MATCH"
+                )
+
+            else:
+
+                match_label = (
+                    "🔄 SIMILAR"
+                )
+
             lines.extend(
                 [
 
                     "",
 
                     f"🛍 OFFER #{index}",
+
+                    match_label,
 
                     f"Товар: "
                     f"{product_data.get('title', '—')}",
@@ -529,7 +613,7 @@ def handle_text(message):
         )
 
     # =========================
-    # SEND RESULT
+    # SEND
     # =========================
 
     bot.send_message(
