@@ -14,7 +14,11 @@ from input import (
 )
 
 from intent import detect_intent
-from product import identify_product
+
+from product import (
+    identify_product,
+    build_product_dna,
+)
 
 
 class SavvyCore:
@@ -30,39 +34,24 @@ class SavvyCore:
         request: SavvyRequest,
     ) -> SavvyResponse:
 
-        # -----------------------------------------------------
-        # 1. Пользователь
-        # -----------------------------------------------------
-
         self._prepare_request(request)
 
-        # -----------------------------------------------------
-        # 2. INPUT
-        # -----------------------------------------------------
-
         input_data = self._parse_input(request)
-
-        # -----------------------------------------------------
-        # 3. INTENT
-        # -----------------------------------------------------
 
         intent = detect_intent(
             text=request.text,
             input_type=input_data["type"],
         )
 
-        # -----------------------------------------------------
-        # 4. PRODUCT IDENTITY
-        # -----------------------------------------------------
-
         product = identify_product(
             text=request.text,
             input_type=input_data["type"],
         )
 
-        # -----------------------------------------------------
-        # RESPONSE
-        # -----------------------------------------------------
+        product_dna = build_product_dna(
+            product=product,
+            user=request.user,
+        )
 
         return SavvyResponse(
             success=True,
@@ -70,8 +59,12 @@ class SavvyCore:
             data={
                 "region": request.user.region,
                 "currency": request.user.currency,
+
                 "input": input_data,
+
                 "product": product,
+
+                "product_dna": product_dna,
             },
         )
 
