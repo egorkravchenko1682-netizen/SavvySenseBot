@@ -1,159 +1,122 @@
 from typing import Any
 
-from currency import CurrencyConverter
-
-
-def _number(
-    value: Any,
-) -> float:
-
-    if value is None:
-        return 0.0
-
-    if isinstance(
-        value,
-        (int, float),
-    ):
-        return float(value)
-
-    try:
-        return float(
-            str(value)
-            .replace(",", ".")
-            .replace("$", "")
-            .replace("€", "")
-            .replace("₽", "")
-            .strip()
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return 0.0
-
-
-def calculate_real_cost(
-    offer: dict[str, Any],
-    target_currency: str,
-    converter: CurrencyConverter,
-) -> dict[str, Any]:
-
-    source_currency = (
-        offer.get(
-            "currency"
-        )
-        or "USD"
-    )
-
-    source_currency = (
-        converter.normalize_currency(
-            source_currency
-        )
-    )
-
-    target_currency = (
-        converter.normalize_currency(
-            target_currency
-        )
-    )
-
-    price = _number(
-        offer.get("price")
-    )
-
-    delivery = _number(
-        offer.get("delivery")
-    )
-
-    taxes = _number(
-        offer.get("taxes")
-    )
-
-    duties = _number(
-        offer.get("duties")
-    )
-
-    fees = _number(
-        offer.get("fees")
-    )
-
-    subtotal = (
-        price
-        + delivery
-        + taxes
-        + duties
-        + fees
-    )
-
-    total_cost = converter.convert(
-        amount=subtotal,
-        from_currency=source_currency,
-        to_currency=target_currency,
-    )
-
-    return {
-        "price": price,
-        "delivery": delivery,
-        "taxes": taxes,
-        "duties": duties,
-        "fees": fees,
-
-        "source_currency":
-            source_currency,
-
-        "target_currency":
-            target_currency,
-
-        "subtotal":
-            round(subtotal, 2),
-
-        "total_cost":
-            total_cost,
-    }
-
 
 def calculate_offers_real_cost(
     offers: list[dict[str, Any]],
     target_currency: str,
-    converter: CurrencyConverter,
+    converter,
 ) -> list[dict[str, Any]]:
 
     result = []
 
     for offer in offers:
 
-        try:
+        price = offer.get("price")
 
-            cost = calculate_real_cost(
-                offer=offer,
-                target_currency=target_currency,
-                converter=converter,
-            )
+        price_known = (
+            price is not None
+        )
 
-            updated_offer = {
-                **offer,
-
-                "real_cost": cost,
-
-                "total_cost":
-                    cost["total_cost"],
-
-                "total_currency":
-                    cost["target_currency"],
-            }
+        if not price_known:
 
             result.append(
-                updated_offer
+                {
+                    **offer,
+
+                    "total_cost": None,
+
+                    "total_currency":
+                        target_currency,
+
+                    "cost_known": False,
+
+                    "cost_breakdown": {
+                        "price": None,
+                        "delivery": None,
+                        "taxes": None,
+                        "duties": None,
+                        "fees": None,
+                    },
+                }
             )
 
-        except Exception as error:
+            continue
 
-            print(
-                f"Real cost calculation "
-                f"failed: {error}"
+        source_currency = (
+            offer.get("currency")
+            or target_currency
+        )
+
+        delivery = (
+            offer.get("delivery")
+            or 0
+        )
+
+        taxes = (
+            offer.get("taxes")
+            or 0
+        )
+
+        duties = (
+            offer.get("duties")
+            or 0
+        )
+
+        fees = (
+            offer.get("fees")
+            or 0
+        )
+
+        subtotal = (
+            float(price)
+            + float(delivery)
+            + float(taxes)
+            + float(duties)
+            + float(fees)
+        )
+
+        try:
+
+            total_cost = converter.convert(
+                amount=subtotal,
+                from_currency=(
+                    source_currency
+                ),
+                to_currency=(
+                    target_currency
+                ),
             )
 
-            result.append(offer)
+        except Exception:
+
+            total_cost = (
+                subtotal
+                if source_currency
+                == target_currency
+                else None
+            )
+
+        result.append(
+            {
+                **offer,
+
+                "total_cost":
+                    total_cost,
+
+                "total_currency":
+                    target_currency,
+
+                "cost_known":
+                    total_cost is not None,
+
+                "cost_breakdown": {
+                    "price": price,
+                    "delivery": delivery,
+                    "taxes": taxes,
+                    "duties": duties,
+                    "fees": fees,
+                },
+            }
+        )
 
     return result
