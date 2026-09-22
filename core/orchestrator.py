@@ -24,6 +24,8 @@ from product import (
 from search import GlobalSearchEngine
 from search.adapters import DemoAdapter
 
+from offer import normalize_offers
+
 
 class SavvyCore:
 
@@ -40,9 +42,6 @@ class SavvyCore:
             GlobalSearchEngine()
         )
 
-        # Временный тестовый источник.
-        # Позже сюда добавятся реальные
-        # Amazon / eBay / AliExpress / etc.
         self.search_engine.add_adapter(
             DemoAdapter()
         )
@@ -79,46 +78,67 @@ class SavvyCore:
             product_dna=product_dna,
         )
 
-        offers = []
+        raw_offers = []
 
-        # Поиск запускаем только
-        # когда есть поисковые запросы.
         if search_plan.get("queries"):
 
-            offers = self.search_engine.search(
-                queries=search_plan["queries"],
-                region=search_plan.get(
-                    "region",
-                    request.user.region,
-                ),
-                currency=search_plan.get(
-                    "currency",
-                    request.user.currency,
-                ),
-                budget=search_plan.get(
-                    "budget",
-                    {},
-                ),
+            raw_offers = (
+                self.search_engine.search(
+                    queries=search_plan[
+                        "queries"
+                    ],
+
+                    region=search_plan.get(
+                        "region",
+                        request.user.region,
+                    ),
+
+                    currency=search_plan.get(
+                        "currency",
+                        request.user.currency,
+                    ),
+
+                    budget=search_plan.get(
+                        "budget",
+                        {},
+                    ),
+                )
             )
+
+        offers = normalize_offers(
+            raw_offers
+        )
 
         return SavvyResponse(
             success=True,
+
             intent=intent,
 
             data={
-                "region": request.user.region,
 
-                "currency": request.user.currency,
+                "region":
+                    request.user.region,
 
-                "input": input_data,
+                "currency":
+                    request.user.currency,
 
-                "product": product,
+                "input":
+                    input_data,
 
-                "product_dna": product_dna,
+                "product":
+                    product,
 
-                "search_plan": search_plan,
+                "product_dna":
+                    product_dna,
 
-                "offers": offers,
+                "search_plan":
+                    search_plan,
+
+                "raw_offers":
+                    raw_offers,
+
+                "offers":
+                    offers,
             },
         )
 
@@ -131,10 +151,13 @@ class SavvyCore:
 
             request.user = UserContext(
                 region=(
-                    self.config.default_region
+                    self.config
+                    .default_region
                 ),
+
                 currency=(
-                    self.config.default_currency
+                    self.config
+                    .default_currency
                 ),
             )
 
