@@ -79,21 +79,28 @@ class SearchOrchestrator:
 
         for provider in self.providers:
 
-            try:
-                provider_offers = await provider.search(
-                    request
-                )
+    print(
+        f"[SAVVY] searching: {provider.name}"
+    )
 
-                offers.extend(
-                    provider_offers
-                )
+    try:
+        provider_offers = await provider.search(
+            request
+        )
 
-            except Exception as exc:
+        print(
+            f"[SAVVY] {provider.name}: "
+            f"{len(provider_offers)} offers"
+        )
 
-                print(
-                    f"[SAVVY] "
-                    f"{provider.name} error: {exc}"
-                )
+        offers.extend(provider_offers)
+
+    except Exception as exc:
+
+        print(
+            f"[SAVVY] {provider.name} ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
         return [
             offer
