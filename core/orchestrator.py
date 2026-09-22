@@ -46,6 +46,10 @@ class SavvyCore:
             config or SavvyConfig.load()
         )
 
+        # =========================
+        # SEARCH ENGINE
+        # =========================
+
         self.search_engine = (
             GlobalSearchEngine()
         )
@@ -54,15 +58,29 @@ class SavvyCore:
             DemoAdapter()
         )
 
+        # =========================
+        # CURRENCY
+        # =========================
+
         self.currency_converter = (
             CurrencyConverter()
         )
 
+        # =========================
+        # DEAL ENGINE
+        # =========================
+
         self.deal_engine = (
             DealEngine(
-                max_results=self.config.max_results
+                max_results=(
+                    self.config.max_results
+                )
             )
         )
+
+    # =========================
+    # MAIN PROCESS
+    # =========================
 
     def process(
         self,
@@ -126,7 +144,9 @@ class SavvyCore:
 
         raw_offers = []
 
-        if search_plan.get("queries"):
+        if search_plan.get(
+            "queries"
+        ):
 
             raw_offers = (
                 self.search_engine.search(
@@ -152,7 +172,7 @@ class SavvyCore:
             )
 
         # =========================
-        # OFFER NORMALIZATION
+        # NORMALIZE OFFERS
         # =========================
 
         offers = normalize_offers(
@@ -188,13 +208,28 @@ class SavvyCore:
 
         # =========================
         # BLOCK 10.1
-        # SYNC MATCH TYPE
+        # CLASSIFIED OFFERS
         # =========================
 
-        offers = self._apply_match_types(
-            offers=offers,
-            deal_analysis=deal_analysis,
+        classified_offers = (
+            deal_analysis.get(
+                "classified_offers",
+                [],
+            )
         )
+
+        # Это главный список,
+        # который получает bot.py.
+        #
+        # Каждый offer уже содержит:
+        #
+        # match_type = exact
+        # или
+        # match_type = similar
+
+        if classified_offers:
+
+            offers = classified_offers
 
         # =========================
         # RESPONSE
@@ -237,7 +272,7 @@ class SavvyCore:
         )
 
     # =========================
-    # REQUEST PREPARATION
+    # PREPARE REQUEST
     # =========================
 
     def _prepare_request(
@@ -260,7 +295,7 @@ class SavvyCore:
             )
 
     # =========================
-    # INPUT PARSER
+    # PARSE INPUT
     # =========================
 
     def _parse_input(
@@ -291,153 +326,3 @@ class SavvyCore:
             "value": None,
             "valid": False,
         }
-
-    # =========================
-    # BLOCK 10.1
-    # APPLY DEAL MATCH TYPES
-    # =========================
-
-    def _apply_match_types(
-        self,
-        offers: list[dict],
-        deal_analysis: dict,
-    ) -> list[dict]:
-        """
-        Синхронизирует результат Deal Engine
-        с основным списком offers.
-
-        Ранее Deal Engine правильно определял
-        exact/similar, но bot.py получал
-        исходные offers без match_type.
-
-        Теперь каждый offer получает:
-
-        match_type = "exact"
-        или
-        match_type = "similar"
-        """
-
-        exact_matches = (
-            deal_analysis.get(
-                "exact_matches",
-                [],
-            )
-        )
-
-        similar_matches = (
-            deal_analysis.get(
-                "similar_matches",
-                [],
-            )
-        )
-
-        # Создаем индексы для быстрого поиска.
-        exact_keys = set()
-        similar_keys = set()
-
-        for offer in exact_matches:
-
-            exact_keys.add(
-                self._offer_key(
-                    offer
-                )
-            )
-
-        for offer in similar_matches:
-
-            similar_keys.add(
-                self._offer_key(
-                    offer
-                )
-            )
-
-        updated_offers = []
-
-        for offer in offers:
-
-            key = self._offer_key(
-                offer
-            )
-
-            updated_offer = {
-                **offer
-            }
-
-            if key in exact_keys:
-
-                updated_offer[
-                    "match_type"
-                ] = "exact"
-
-            elif key in similar_keys:
-
-                updated_offer[
-                    "match_type"
-                ] = "similar"
-
-            else:
-
-                updated_offer[
-                    "match_type"
-                ] = "unknown"
-
-            updated_offers.append(
-                updated_offer
-            )
-
-        return updated_offers
-
-    # =========================
-    # OFFER IDENTITY
-    # =========================
-
-    @staticmethod
-    def _offer_key(
-        offer: dict,
-    ) -> tuple:
-
-        product = offer.get(
-            "product",
-            {},
-        )
-
-        return (
-            str(
-                offer.get(
-                    "source",
-                    "",
-                )
-            ).strip().lower(),
-
-            str(
-                product.get(
-                    "title",
-                    "",
-                )
-            ).strip().lower(),
-
-            str(
-                offer.get(
-                    "seller",
-                    "",
-                )
-            ).strip().lower(),
-
-            str(
-                offer.get(
-                    "url",
-                    "",
-                )
-            ).strip().lower(),
-
-            round(
-                float(
-                    offer.get(
-                        "price",
-                        0,
-                    )
-                    or 0
-                ),
-                2,
-            ),
-        )
