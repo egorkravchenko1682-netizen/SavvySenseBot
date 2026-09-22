@@ -111,10 +111,13 @@ async def handle_message(
     best = result.best_deal
 
     response = (
-        "🧠 SAVVY SENSE\n\n"
-        f"🔎 Запрос: {request.original_query}\n"
-        f"🎯 Intent: {request.intent}\n"
-    )
+    "🧠 SAVVY SENSE\n\n"
+    f"🔎 Запрос: {request.original_query}\n"
+    f"🛍 Товар: {' '.join(request.keywords)}\n"
+    f"🌍 Регион: {request.country}\n"
+    f"💱 Валюта: {request.currency}\n"
+    f"🎯 Intent: {request.intent}\n"
+)
 
     if request.max_price is not None:
         response += (
