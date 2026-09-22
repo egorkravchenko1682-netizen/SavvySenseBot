@@ -1,76 +1,77 @@
 from typing import Any
 
 
+def normalize_offer(
+    offer: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Нормализует одно предложение SAVVY SENSE.
+
+    Важно:
+    если цена неизвестна, сохраняем None,
+    а не превращаем её в 0.
+    """
+
+    raw_price = offer.get("price")
+
+    price = _to_float_or_none(
+        raw_price
+    )
+
+    delivery = _to_float_or_none(
+        offer.get("delivery")
+    )
+
+    taxes = _to_float_or_none(
+        offer.get("taxes")
+    )
+
+    duties = _to_float_or_none(
+        offer.get("duties")
+    )
+
+    fees = _to_float_or_none(
+        offer.get("fees")
+    )
+
+    return {
+        **offer,
+
+        "price": price,
+
+        "delivery": delivery,
+        "taxes": taxes,
+        "duties": duties,
+        "fees": fees,
+
+        "price_known":
+            price is not None,
+
+        "delivery_known":
+            delivery is not None,
+
+        "taxes_known":
+            taxes is not None,
+
+        "duties_known":
+            duties is not None,
+
+        "fees_known":
+            fees is not None,
+    }
+
+
 def normalize_offers(
     offers: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    """
+    Нормализует список предложений.
+    """
 
-    normalized = []
-
-    for offer in offers:
-
-        raw_price = offer.get("price")
-
-        price = None
-
-        if raw_price is not None:
-            try:
-                price = float(raw_price)
-            except (TypeError, ValueError):
-                price = None
-
-        delivery = _to_float_or_none(
-            offer.get("delivery")
-        )
-
-        taxes = _to_float_or_none(
-            offer.get("taxes")
-        )
-
-        duties = _to_float_or_none(
-            offer.get("duties")
-        )
-
-        fees = _to_float_or_none(
-            offer.get("fees")
-        )
-
-        normalized_offer = {
-            **offer,
-
-            "price": price,
-
-            "delivery": delivery,
-            "taxes": taxes,
-            "duties": duties,
-            "fees": fees,
-
-            "price_known": (
-                price is not None
-            ),
-
-            "delivery_known": (
-                delivery is not None
-            ),
-
-            "taxes_known": (
-                taxes is not None
-            ),
-
-            "duties_known": (
-                duties is not None
-            ),
-
-            "fees_known": (
-                fees is not None
-            ),
-        }
-
-        normalized.append(
-            normalized_offer
-        )
-
-    return normalized
+    return [
+        normalize_offer(offer)
+        for offer in offers
+    ]
 
 
 def _to_float_or_none(
@@ -81,5 +82,9 @@ def _to_float_or_none(
 
     try:
         return float(value)
-    except (TypeError, ValueError):
+
+    except (
+        TypeError,
+        ValueError,
+    ):
         return None
