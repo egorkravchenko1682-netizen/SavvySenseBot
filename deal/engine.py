@@ -5,10 +5,16 @@ class DealEngine:
     """
     Анализирует нормализованные предложения SAVVY.
 
-    Deal Engine не выполняет поиск.
-    Он получает уже найденные предложения
-    и определяет их тип относительно
-    исходного Product Identity.
+    Deal Engine определяет:
+    - exact match
+    - similar product
+    - over budget
+    - best exact match
+
+    Важно:
+    classified_offers сохраняет ВСЕ предложения
+    в исходном порядке и добавляет каждому
+    match_type.
     """
 
     def __init__(
@@ -27,6 +33,8 @@ class DealEngine:
         exact_matches = []
         similar_matches = []
         over_budget = []
+
+        classified_offers = []
 
         budget = product.get(
             "budget"
@@ -67,20 +75,27 @@ class DealEngine:
                 offer_product=product_data,
             )
 
-            item = {
+            match_type = (
+                "exact"
+                if exact
+                else "similar"
+            )
+
+            classified_offer = {
                 **offer,
 
-                "match_type": (
-                    "exact"
-                    if exact
-                    else "similar"
-                ),
+                "match_type":
+                    match_type,
             }
+
+            classified_offers.append(
+                classified_offer
+            )
 
             if exact:
 
                 exact_matches.append(
-                    item
+                    classified_offer
                 )
 
                 if (
@@ -92,14 +107,18 @@ class DealEngine:
                 ):
 
                     over_budget.append(
-                        item
+                        classified_offer
                     )
 
             else:
 
                 similar_matches.append(
-                    item
+                    classified_offer
                 )
+
+        # =========================
+        # SORT
+        # =========================
 
         exact_matches.sort(
             key=lambda item:
@@ -134,6 +153,10 @@ class DealEngine:
             )
         )
 
+        # =========================
+        # CHEAPER
+        # =========================
+
         cheaper = []
 
         if exact_matches:
@@ -160,13 +183,27 @@ class DealEngine:
                         offer
                     )
 
+        # =========================
+        # BEST EXACT
+        # =========================
+
         best_exact = (
             exact_matches[0]
             if exact_matches
             else None
         )
 
+        # =========================
+        # RESULT
+        # =========================
+
         return {
+
+            # Все предложения уже
+            # с match_type
+            "classified_offers":
+                classified_offers,
+
             "exact_matches":
                 exact_matches[
                     :self.max_results
@@ -191,6 +228,7 @@ class DealEngine:
                 best_exact,
 
             "counts": {
+
                 "exact":
                     len(exact_matches),
 
@@ -201,6 +239,10 @@ class DealEngine:
                     len(over_budget),
             },
         }
+
+    # =========================
+    # EXACT MATCH
+    # =========================
 
     def _is_exact_match(
         self,
@@ -230,11 +272,16 @@ class DealEngine:
             offer_title
         )
 
+        # Полное совпадение названия
         if requested in offered:
             return True
 
         if offered in requested:
             return True
+
+        # =========================
+        # BRAND
+        # =========================
 
         requested_brand = (
             product.get("brand")
@@ -255,6 +302,10 @@ class DealEngine:
             )
         ):
             return False
+
+        # =========================
+        # STORAGE
+        # =========================
 
         requested_attributes = (
             product.get(
@@ -277,12 +328,28 @@ class DealEngine:
 
                 return False
 
-        return (
+        # =========================
+        # BRAND IN TITLE
+        # =========================
+
+        normalized_brand = (
             self._normalize_text(
                 requested_brand or ""
             )
-            in offered
         )
+
+        if normalized_brand:
+
+            return (
+                normalized_brand
+                in offered
+            )
+
+        return False
+
+    # =========================
+    # NORMALIZE TEXT
+    # =========================
 
     @staticmethod
     def _normalize_text(
