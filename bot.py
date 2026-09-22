@@ -6,7 +6,7 @@ from core import SavvyCore
 from core.models import SavvyRequest, UserContext
 
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set")
@@ -19,43 +19,29 @@ savvy = SavvyCore()
 
 @bot.message_handler(commands=["start"])
 def start_command(message):
-    text = (
-        "🧠 SAVVY SENSE\n\n"
-        "🌎 Ищу товары по всему миру.\n\n"
-        "Отправь мне:\n"
-        "• название товара\n"
-        "• ссылку на товар\n"
-        "• фотографию товара\n\n"
-        "Примеры:\n"
-        "«Нужен iPhone до 800$»\n"
-        "«Найди дешевле»\n"
-        "«Сравни эти товары»"
-    )
-
     bot.send_message(
         message.chat.id,
-        text,
+        "🧠 SAVVY SENSE\n\n"
+        "🌎 Ищу товары по всему миру.\n\n"
+        "Отправь:\n"
+        "• название товара\n"
+        "• ссылку\n"
+        "• фотографию товара",
     )
 
 
 @bot.message_handler(commands=["help"])
 def help_command(message):
-    text = (
-        "🧠 SAVVY SENSE — команды\n\n"
-        "/start — запустить SAVVY\n"
-        "/find — найти товар\n"
-        "/compare — сравнить товары\n"
-        "/check — проверить, стоит ли покупать\n"
-        "/cheaper — найти дешевле\n"
-        "/track — отслеживать цену\n"
-        "/help — помощь\n\n"
-        "Также можно просто отправить название товара, "
-        "ссылку или фотографию."
-    )
-
     bot.send_message(
         message.chat.id,
-        text,
+        "🧠 SAVVY SENSE\n\n"
+        "/start — запустить\n"
+        "/find — найти товар\n"
+        "/compare — сравнить\n"
+        "/check — проверить товар\n"
+        "/cheaper — найти дешевле\n"
+        "/track — отслеживать цену\n"
+        "/help — помощь",
     )
 
 
@@ -71,7 +57,7 @@ def find_command(message):
 def compare_command(message):
     bot.send_message(
         message.chat.id,
-        "⚖️ Отправь товары или ссылки, которые нужно сравнить.",
+        "⚖️ Отправь товары или ссылки для сравнения.",
     )
 
 
@@ -79,7 +65,7 @@ def compare_command(message):
 def check_command(message):
     bot.send_message(
         message.chat.id,
-        "💰 Отправь ссылку или описание товара.",
+        "🔎 Отправь ссылку или описание товара.",
     )
 
 
@@ -87,7 +73,7 @@ def check_command(message):
 def cheaper_command(message):
     bot.send_message(
         message.chat.id,
-        "🔎 Отправь ссылку или название товара — попробуем найти дешевле.",
+        "💰 Отправь ссылку или название товара.",
     )
 
 
@@ -95,12 +81,13 @@ def cheaper_command(message):
 def track_command(message):
     bot.send_message(
         message.chat.id,
-        "📉 Отправь ссылку на товар, который нужно отслеживать.",
+        "📉 Отправь ссылку на товар для отслеживания.",
     )
 
 
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
+
     user = UserContext(
         user_id=message.from_user.id,
     )
@@ -115,20 +102,21 @@ def handle_photo(message):
     if not response.success:
         bot.send_message(
             message.chat.id,
-            f"❌ {response.error or 'Не удалось обработать запрос.'}",
+            f"❌ {response.error or 'Ошибка обработки.'}",
         )
         return
 
     bot.send_message(
         message.chat.id,
         "📷 Фото получено.\n\n"
-        "Модуль поиска по фотографии будет подключён "
+        "🔬 Product Identity определит товар "
         "на следующем этапе.",
     )
 
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
+
     text = message.text.strip()
 
     if not text:
@@ -148,43 +136,88 @@ def handle_text(message):
     if not response.success:
         bot.send_message(
             message.chat.id,
-            f"❌ {response.error or 'Ошибка обработки запроса.'}",
+            f"❌ {response.error or 'Ошибка обработки.'}",
         )
         return
 
+    product = response.data.get("product", {})
+
     intent = response.intent
 
-    if intent == "compare":
-        prefix = "⚖️ Запрос на сравнение принят."
-    elif intent == "cheaper":
-        prefix = "💰 Запрос на поиск дешевле принят."
-    elif intent == "check":
-        prefix = "🔎 Запрос на проверку товара принят."
-    elif intent == "track":
-        prefix = "📉 Запрос на отслеживание принят."
-    else:
-        prefix = "🔎 Запрос на поиск товара принят."
+    intent_names = {
+        "product_search": "🔎 Поиск товара",
+        "compare": "⚖️ Сравнение",
+        "cheaper": "💰 Поиск дешевле",
+        "check": "🔍 Проверка товара",
+        "track": "📉 Отслеживание цены",
+        "unknown": "❓ Неизвестный запрос",
+    }
 
-    bot.send_message(
-        message.chat.id,
-        f"{prefix}\n\n"
-        f"🌍 Регион: {response.data.get('region')}\n"
-        f"💱 Валюта: {response.data.get('currency')}\n\n"
-        "Следующий модуль подключит настоящий поиск "
-        "по магазинам и маркетплейсам.",
+    intent_text = intent_names.get(
+        intent,
+        intent,
     )
 
+    attributes = product.get(
+        "attributes",
+        {},
+    )
 
-@bot.message_handler(content_types=["document"])
-def handle_document(message):
+    lines = [
+        "🧠 SAVVY SENSE",
+        "",
+        f"🎯 Intent: {intent_text}",
+        "",
+        "📦 PRODUCT IDENTITY",
+        f"Название: {product.get('name') or '—'}",
+        f"Бренд: {product.get('brand') or '—'}",
+        f"Категория: {product.get('category') or '—'}",
+    ]
+
+    if attributes.get("storage"):
+        lines.append(
+            f"💾 Память: {attributes['storage']}"
+        )
+
+    if attributes.get("color"):
+        lines.append(
+            f"🎨 Цвет: {attributes['color']}"
+        )
+
+    if attributes.get("gender"):
+        lines.append(
+            f"👤 Пол: {attributes['gender']}"
+        )
+
+    if attributes.get("material"):
+        lines.append(
+            f"🧵 Материал: {attributes['material']}"
+        )
+
+    if product.get("budget") is not None:
+        lines.append(
+            f"💰 Бюджет: "
+            f"{product['budget']:.2f} "
+            f"{product.get('currency', '')}"
+        )
+
+    lines.extend(
+        [
+            "",
+            f"🌍 Регион: {response.data.get('region')}",
+            f"💱 Валюта: {response.data.get('currency')}",
+        ]
+    )
+
     bot.send_message(
         message.chat.id,
-        "📄 Этот тип файла пока не поддерживается.",
+        "\n".join(lines),
     )
 
 
 if __name__ == "__main__":
     print("🧠 SAVVY SENSE is starting...")
+
     bot.infinity_polling(
         skip_pending=True,
     )
