@@ -32,6 +32,8 @@ from cost.calculator import (
     calculate_offers_real_cost,
 )
 
+from deal import DealEngine
+
 
 class SavvyCore:
 
@@ -54,6 +56,12 @@ class SavvyCore:
 
         self.currency_converter = (
             CurrencyConverter()
+        )
+
+        self.deal_engine = (
+            DealEngine(
+                max_results=self.config.max_results
+            )
         )
 
     def process(
@@ -131,6 +139,13 @@ class SavvyCore:
             ),
         )
 
+        deal_analysis = (
+            self.deal_engine.analyze(
+                offers=offers,
+                product=product,
+            )
+        )
+
         return SavvyResponse(
             success=True,
 
@@ -161,6 +176,9 @@ class SavvyCore:
 
                 "offers":
                     offers,
+
+                "deal_analysis":
+                    deal_analysis,
             },
         )
 
