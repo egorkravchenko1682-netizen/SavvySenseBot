@@ -1,13 +1,10 @@
 from .models import Offer, SearchRequest
+from .ebay import EbayProvider
 
 
 class SearchProvider:
     """
-    Базовый интерфейс поиска.
-
-    В будущем сюда подключим реальные источники:
-    Amazon, eBay, AliExpress, Ozon, Wildberries,
-    магазины и другие сайты.
+    Базовый интерфейс поискового источника.
     """
 
     name = "base"
@@ -22,7 +19,6 @@ class SearchProvider:
 class DemoSearchProvider(SearchProvider):
     """
     Временный тестовый источник.
-    Нужен для проверки работы ядра SAVVY.
     """
 
     name = "demo"
@@ -62,14 +58,17 @@ class DemoSearchProvider(SearchProvider):
 
 class SearchOrchestrator:
     """
-    Управляет всеми источниками поиска.
+    Управляет источниками поиска.
     """
 
     def __init__(
         self,
-        providers: list[SearchProvider],
+        providers=None,
     ):
-        self.providers = providers
+        self.providers = providers or [
+            DemoSearchProvider(),
+            EbayProvider(),
+        ]
 
     async def search(
         self,
@@ -79,13 +78,18 @@ class SearchOrchestrator:
         offers: list[Offer] = []
 
         for provider in self.providers:
+
             try:
                 provider_offers = await provider.search(
                     request
                 )
-                offers.extend(provider_offers)
+
+                offers.extend(
+                    provider_offers
+                )
 
             except Exception as exc:
+
                 print(
                     f"[SAVVY] "
                     f"{provider.name} error: {exc}"
