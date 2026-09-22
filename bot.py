@@ -3,26 +3,38 @@ import os
 import telebot
 
 from core import SavvyCore
+
 from core.models import (
     SavvyRequest,
     UserContext,
 )
 
 
+# =========================
+# CONFIG
+# =========================
+
 BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
     ""
 ).strip()
 
+
 if not BOT_TOKEN:
+
     raise RuntimeError(
         "BOT_TOKEN is not set"
     )
 
 
+# =========================
+# TELEGRAM BOT
+# =========================
+
 bot = telebot.TeleBot(
     BOT_TOKEN
 )
+
 
 savvy = SavvyCore()
 
@@ -38,8 +50,11 @@ def start_command(message):
 
     bot.send_message(
         message.chat.id,
+
         "🧠 SAVVY SENSE\n\n"
+
         "🌎 Ищу товары по всему миру.\n\n"
+
         "Отправь:\n"
         "• название товара\n"
         "• ссылку\n"
@@ -58,7 +73,9 @@ def help_command(message):
 
     bot.send_message(
         message.chat.id,
+
         "🧠 SAVVY SENSE\n\n"
+
         "/start — запустить\n"
         "/find — найти товар\n"
         "/compare — сравнить\n"
@@ -80,6 +97,7 @@ def find_command(message):
 
     bot.send_message(
         message.chat.id,
+
         "🔎 Напиши, какой товар нужно найти.",
     )
 
@@ -95,7 +113,9 @@ def compare_command(message):
 
     bot.send_message(
         message.chat.id,
-        "⚖️ Отправь товары или ссылки для сравнения.",
+
+        "⚖️ Отправь товары или ссылки "
+        "для сравнения.",
     )
 
 
@@ -110,7 +130,9 @@ def check_command(message):
 
     bot.send_message(
         message.chat.id,
-        "🔎 Отправь ссылку или описание товара.",
+
+        "🔎 Отправь ссылку или "
+        "описание товара.",
     )
 
 
@@ -125,7 +147,9 @@ def cheaper_command(message):
 
     bot.send_message(
         message.chat.id,
-        "💰 Отправь ссылку или название товара.",
+
+        "💰 Отправь ссылку или "
+        "название товара.",
     )
 
 
@@ -140,7 +164,9 @@ def track_command(message):
 
     bot.send_message(
         message.chat.id,
-        "📉 Отправь ссылку на товар для отслеживания.",
+
+        "📉 Отправь ссылку на товар "
+        "для отслеживания.",
     )
 
 
@@ -170,15 +196,20 @@ def handle_photo(message):
 
         bot.send_message(
             message.chat.id,
-            f"❌ {response.error or 'Ошибка обработки.'}",
+
+            f"❌ "
+            f"{response.error or 'Ошибка обработки.'}",
         )
 
         return
 
     bot.send_message(
         message.chat.id,
+
         "📷 Фото получено.\n\n"
+
         "🧬 Product DNA подготовлено.\n\n"
+
         "🔎 Следующий этап — поиск товара "
         "по изображению.",
     )
@@ -196,6 +227,7 @@ def handle_text(message):
     text = message.text.strip()
 
     if not text:
+
         return
 
     user = UserContext(
@@ -215,10 +247,16 @@ def handle_text(message):
 
         bot.send_message(
             message.chat.id,
-            f"❌ {response.error or 'Ошибка обработки.'}",
+
+            f"❌ "
+            f"{response.error or 'Ошибка обработки.'}",
         )
 
         return
+
+    # =========================
+    # DATA
+    # =========================
 
     product = response.data.get(
         "product",
@@ -247,6 +285,10 @@ def handle_text(message):
 
     intent = response.intent
 
+    # =========================
+    # INTENT LABELS
+    # =========================
+
     intent_names = {
 
         "product_search":
@@ -273,10 +315,18 @@ def handle_text(message):
         intent,
     )
 
+    # =========================
+    # PRODUCT ATTRIBUTES
+    # =========================
+
     attributes = product.get(
         "attributes",
         {},
     )
+
+    # =========================
+    # MESSAGE
+    # =========================
 
     lines = [
 
@@ -300,41 +350,75 @@ def handle_text(message):
         f"{product.get('category') or '—'}",
     ]
 
-    if attributes.get("storage"):
+    # =========================
+    # STORAGE
+    # =========================
+
+    if attributes.get(
+        "storage"
+    ):
 
         lines.append(
             f"💾 Память: "
             f"{attributes['storage']}"
         )
 
-    if attributes.get("color"):
+    # =========================
+    # COLOR
+    # =========================
+
+    if attributes.get(
+        "color"
+    ):
 
         lines.append(
             f"🎨 Цвет: "
             f"{attributes['color']}"
         )
 
-    if attributes.get("gender"):
+    # =========================
+    # GENDER
+    # =========================
+
+    if attributes.get(
+        "gender"
+    ):
 
         lines.append(
             f"👤 Пол: "
             f"{attributes['gender']}"
         )
 
-    if attributes.get("material"):
+    # =========================
+    # MATERIAL
+    # =========================
+
+    if attributes.get(
+        "material"
+    ):
 
         lines.append(
             f"🧵 Материал: "
             f"{attributes['material']}"
         )
 
-    if product.get("budget") is not None:
+    # =========================
+    # BUDGET
+    # =========================
+
+    if product.get(
+        "budget"
+    ) is not None:
 
         lines.append(
             f"💰 Бюджет: "
             f"{product['budget']:.2f} "
             f"{product.get('currency', '')}"
         )
+
+    # =========================
+    # REGION
+    # =========================
 
     lines.extend(
         [
@@ -348,6 +432,10 @@ def handle_text(message):
             f"{response.data.get('currency')}",
         ]
     )
+
+    # =========================
+    # PRODUCT DNA
+    # =========================
 
     search_scope = product_dna.get(
         "search_scope",
@@ -380,6 +468,10 @@ def handle_text(message):
             f"{product_dna.get('condition') or '—'}",
         ]
     )
+
+    # =========================
+    # SEARCH QUERY BUILDER
+    # =========================
 
     lines.extend(
         [
@@ -463,11 +555,17 @@ def handle_text(message):
         ]
     )
 
+    # =========================
+    # BEST EXACT MATCH
+    # =========================
+
     if best_exact:
 
-        best_product = best_exact.get(
-            "product",
-            {},
+        best_product = (
+            best_exact.get(
+                "product",
+                {},
+            )
         )
 
         lines.extend(
@@ -525,6 +623,10 @@ def handle_text(message):
                 )
             )
 
+            # =========================
+            # MATCH TYPE
+            # =========================
+
             match_type = offer.get(
                 "match_type",
                 "unknown",
@@ -536,11 +638,21 @@ def handle_text(message):
                     "🎯 EXACT MATCH"
                 )
 
-            else:
+            elif match_type == "similar":
 
                 match_label = (
                     "🔄 SIMILAR"
                 )
+
+            else:
+
+                match_label = (
+                    "❓ UNKNOWN MATCH"
+                )
+
+            # =========================
+            # OFFER
+            # =========================
 
             lines.extend(
                 [
@@ -595,7 +707,13 @@ def handle_text(message):
                 ]
             )
 
-            if offer.get("url"):
+            # =========================
+            # URL
+            # =========================
+
+            if offer.get(
+                "url"
+            ):
 
                 lines.append(
                     f"🔗 {offer.get('url')}"
@@ -618,6 +736,7 @@ def handle_text(message):
 
     bot.send_message(
         message.chat.id,
+
         "\n".join(lines),
     )
 
