@@ -147,16 +147,6 @@ def handle_photo(message):
 
         return
 
-    product = response.data.get(
-        "product",
-        {},
-    )
-
-    product_dna = response.data.get(
-        "product_dna",
-        {},
-    )
-
     bot.send_message(
         message.chat.id,
         "📷 Фото получено.\n\n"
@@ -212,10 +202,15 @@ def handle_text(message):
         {},
     )
 
+    search_plan = response.data.get(
+        "search_plan",
+        {},
+    )
+
     intent = response.intent
 
     # =========================
-    # INTENT NAME
+    # INTENT
     # =========================
 
     intent_names = {
@@ -245,7 +240,7 @@ def handle_text(message):
     )
 
     # =========================
-    # PRODUCT ATTRIBUTES
+    # ATTRIBUTES
     # =========================
 
     attributes = product.get(
@@ -254,7 +249,7 @@ def handle_text(message):
     )
 
     # =========================
-    # BASIC RESPONSE
+    # BASIC RESULT
     # =========================
 
     lines = [
@@ -389,7 +384,43 @@ def handle_text(message):
     )
 
     # =========================
-    # SEND RESULT
+    # SEARCH QUERY BUILDER
+    # =========================
+
+    lines.extend(
+        [
+
+            "",
+
+            "🔎 SEARCH QUERY BUILDER",
+
+            "",
+
+            "Запросы:",
+        ]
+    )
+
+    queries = search_plan.get(
+        "queries",
+        [],
+    )
+
+    if queries:
+
+        for query in queries:
+
+            lines.append(
+                f"• {query}"
+            )
+
+    else:
+
+        lines.append(
+            "• Поисковые запросы не сформированы"
+        )
+
+    # =========================
+    # SEND
     # =========================
 
     bot.send_message(
