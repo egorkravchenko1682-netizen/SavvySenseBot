@@ -1,191 +1,306 @@
 import os
 
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
+import telebot
+
+from savvy_core import (
+    REGIONS,
+    add_tracking,
+    build_context,
+    get_preferences,
+    get_region,
+    get_tracking,
+    init_db,
+    remember,
+    set_region,
+    understand,
 )
 
-from savvy_core.engine import SavvyEngine
-from savvy_core.models import UserProfile
-from savvy_core.search import SearchOrchestrator
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-if not TOKEN:
+if not BOT_TOKEN:
     raise RuntimeError(
-        "TELEGRAM_BOT_TOKEN is not configured"
+        "BOT_TOKEN environment variable is not set"
     )
 
 
-search_orchestrator = SearchOrchestrator()
+bot = telebot.TeleBot(BOT_TOKEN)
 
-engine = SavvyEngine(
-    search_orchestrator
-)
+init_db()
 
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    await update.message.reply_text(
+@bot.message_handler(commands=["start"])
+def start(message):
+    user_id = message.from_user.id
+
+    text = (
         "🧠 SAVVY SENSE\n\n"
-        "Твой персональный AI Shopping Assistant\n"
-        "для СНГ и всего мира.\n\n"
-        "Я умею:\n"
-        "🔎 искать товары\n"
-        "💰 сравнивать цены\n"
-        "🌍 искать по СНГ и миру\n"
-        "📷 искать по фото\n"
-        "🔗 анализировать ссылки\n"
-        "🧠 учитывать твои предпочтения\n"
-        "⭐ выбирать лучший вариант\n"
-        "💡 помогать решить — покупать или подождать\n\n"
-        "🌍 Регион: Беларусь (BY)\n"
-        "💱 Валюта: BYN\n\n"
-        "Просто напиши:\n\n"
-        "Нужен iPhone 15 до 800$"
+        "Твой AI-помощник для умных покупок.\n\n"
+        "🌎 Ищу товары по всему миру.\n\n"
+        "Отправь:\n"
+        "• ссылку на товар\n"
+        "• описание товара\n"
+        "• фотографию товара\n\n"
+        "Основные команды:\n"
+        "/find — найти товар\n"
+        "/compare — сравнить\n"
+        "/check — стоит ли покупать\n"
+        "/cheaper — найти дешевле\n"
+        "/track — отслеживать цену\n"
+        "/region — регион доставки\n"
+        "/remember — сохранить предпочтение\n"
+        "/help — помощь"
+    )
+
+    bot.send_message(
+        message.chat.id,
+        text,
     )
 
 
-async def handle_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    if not update.message:
-        return
-
-    if not update.message.text:
-        return
-
-    query = update.message.text.strip()
-
-    if not query:
-        return
-
-    user_id = update.effective_user.id
-
-    profile = UserProfile(
-        user_id=user_id
+@bot.message_handler(commands=["help"])
+def help_command(message):
+    bot.send_message(
+        message.chat.id,
+        (
+            "🧠 SAVVY SENSE\n\n"
+            "/find — найти товар\n"
+            "/compare — сравнить товары\n"
+            "/check — проверить покупку\n"
+            "/cheaper — найти дешевле\n"
+            "/track — отслеживать цену\n"
+            "/region — изменить регион\n"
+            "/remember — сохранить предпочтение\n\n"
+            "Также можно просто написать запрос "
+            "обычным текстом."
+        ),
     )
 
-    await update.message.reply_text(
-        "🔎 SAVVY анализирует запрос..."
+
+@bot.message_handler(commands=["region"])
+def region_command(message):
+    user_id = message.from_user.id
+
+    current = get_region(user_id)
+
+    regions_text = "\n".join(
+        f"{code} — {name}"
+        for code, name in REGIONS.items()
     )
+
+    bot.send_message(
+        message.chat.id,
+        (
+            f"🌍 Текущий регион: {current}\n\n"
+            f"Доступные регионы:\n{regions_text}\n\n"
+            "Чтобы изменить регион, отправь:\n"
+            "/region BY"
+        ),
+    )
+
+
+@bot.message_handler(
+    func=lambda message: (
+        message.text or ""
+    ).lower().startswith("/region ")
+)
+def set_region_command(message):
+    user_id = message.from_user.id
+
+    parts = message.text.split()
+
+    if len(parts) < 2:
+        bot.send_message(
+            message.chat.id,
+            "Пример: /region BY",
+        )
+        return
+
+    region = parts[1].upper()
 
     try:
-        result = await engine.search(
-            query=query,
-            profile=profile,
+        set_region(
+            user_id,
+            region,
         )
 
-    except Exception as exc:
-        print(f"[SAVVY ERROR] {exc}")
-
-        await update.message.reply_text(
-            "⚠️ Произошла ошибка при обработке запроса."
+        bot.send_message(
+            message.chat.id,
+            (
+                f"🌍 Регион изменён: "
+                f"{REGIONS[region]} ({region})"
+            ),
         )
 
+    except ValueError:
+        bot.send_message(
+            message.chat.id,
+            "Неизвестный регион.",
+        )
+
+
+@bot.message_handler(commands=["remember"])
+def remember_command(message):
+    text = message.text or ""
+
+    parts = text.split(maxsplit=2)
+
+    if len(parts) < 3:
+        bot.send_message(
+            message.chat.id,
+            (
+                "Использование:\n"
+                "/remember ключ значение\n\n"
+                "Например:\n"
+                "/remember brand Nike"
+            ),
+        )
         return
 
-    if not result.offers:
-        await update.message.reply_text(
-            "😔 Подходящих предложений пока не найдено."
+    key = parts[1]
+    value = parts[2]
+
+    remember(
+        message.from_user.id,
+        key,
+        value,
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"🧠 Запомнил:\n{key} = {value}",
+    )
+
+
+@bot.message_handler(commands=["track"])
+def track_command(message):
+    text = message.text or ""
+
+    query = text[len("/track"):].strip()
+
+    if not query:
+        bot.send_message(
+            message.chat.id,
+            (
+                "Напиши товар для отслеживания.\n\n"
+                "Например:\n"
+                "/track iPhone 16 Pro"
+            ),
         )
         return
 
-    request = result.request
-    cheapest = result.cheapest
-    best = result.best_deal
+    add_tracking(
+        user_id=message.from_user.id,
+        product=query,
+    )
+
+    bot.send_message(
+        message.chat.id,
+        (
+            "🔔 Товар добавлен в отслеживание:\n\n"
+            f"{query}"
+        ),
+    )
+
+
+@bot.message_handler(commands=["find"])
+def find_command(message):
+    process_text(
+        message,
+        message.text,
+    )
+
+
+@bot.message_handler(commands=["compare"])
+def compare_command(message):
+    process_text(
+        message,
+        message.text,
+    )
+
+
+@bot.message_handler(commands=["check"])
+def check_command(message):
+    process_text(
+        message,
+        message.text,
+    )
+
+
+@bot.message_handler(commands=["cheaper"])
+def cheaper_command(message):
+    process_text(
+        message,
+        message.text,
+    )
+
+
+def process_text(message, text):
+    user_id = message.from_user.id
+
+    result = understand(text)
+
+    context = build_context(user_id)
 
     response = (
-    "🧠 SAVVY SENSE\n\n"
-    f"🔎 Запрос: {request.original_query}\n"
-    f"🛍 Товар: {' '.join(request.keywords)}\n"
-    f"🌍 Регион: {request.country}\n"
-    f"💱 Валюта: {request.currency}\n"
-    f"🎯 Intent: {request.intent}\n"
+        "🧠 SAVVY SENSE\n\n"
+        f"🔎 Запрос: {result['query']}\n"
+        f"🎯 Intent: {result['intent']}\n"
+        f"🌍 Регион: {context['region']}\n"
+        f"💱 Валюта: {context['currency']}"
+    )
+
+    if result.get("budget") is not None:
+        response += (
+            f"\n💰 Бюджет: "
+            f"до {result['budget']:.2f}"
+        )
+
+    response += (
+        "\n\n"
+        "⚙️ Запрос принят ядром SAVVY.\n"
+        "🔧 Поисковый модуль будет подключён "
+        "следующим блоком."
+    )
+
+    bot.send_message(
+        message.chat.id,
+        response,
+    )
+
+
+@bot.message_handler(
+    content_types=["photo"]
 )
-
-    if request.max_price is not None:
-        response += (
-            f"💰 Бюджет: до "
-            f"{request.max_price:.2f} "
-            f"{request.currency}\n"
-        )
-
-    response += "\n"
-
-    if cheapest:
-        response += (
-            "💰 CHEAPEST\n"
-            f"{cheapest.title}\n"
-            f"Цена: {cheapest.price:.2f} "
-            f"{cheapest.currency}\n"
-            f"🚚 Доставка: {cheapest.shipping_cost:.2f} "
-            f"{cheapest.currency}\n"
-            f"💵 REAL COST: {cheapest.real_cost:.2f} "
-            f"{cheapest.currency}\n"
-            f"🏪 Продавец: {cheapest.seller}\n"
-            f"⭐ Рейтинг: "
-            f"{cheapest.seller_rating or 'нет данных'}\n"
-            f"🔗 {cheapest.url}\n\n"
-        )
-
-    if best:
-        response += (
-            "🏆 BEST DEAL\n"
-            f"{best.title}\n"
-            f"💵 REAL COST: {best.real_cost:.2f} "
-            f"{best.currency}\n"
-            f"⭐ Рейтинг продавца: "
-            f"{best.seller_rating or 'нет данных'}\n"
-            f"🚚 Доставка: "
-            f"{best.delivery_days or 'нет данных'} дней\n"
-            f"🧠 SAVVY SCORE: "
-            f"{result.savvy_score}/100\n"
-            f"📌 Решение: "
-            f"{result.decision}\n\n"
-            f"{result.explanation}"
-        )
-
-    await update.message.reply_text(
-        response
+def photo_handler(message):
+    bot.send_message(
+        message.chat.id,
+        (
+            "📷 Фото получено.\n\n"
+            "SAVVY сохранил входной тип "
+            "запроса.\n\n"
+            "Модуль определения товара по фото "
+            "подключим следующим блоком."
+        ),
     )
 
 
-def main():
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .build()
-    )
+@bot.message_handler(
+    content_types=["text"]
+)
+def text_handler(message):
+    if message.text.startswith("/"):
+        return
 
-    application.add_handler(
-        CommandHandler(
-            "start",
-            start,
-        )
+    process_text(
+        message,
+        message.text,
     )
-
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_message,
-        )
-    )
-
-    print(
-        "🧠 SAVVY SENSE bot started."
-    )
-
-    application.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+    print("🧠 SAVVY SENSE started")
+
+    bot.infinity_polling(
+        skip_pending=True
+    )
