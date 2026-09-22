@@ -28,7 +28,10 @@ from search.adapters import (
     DuckDuckGoAdapter,
 )
 
-from offer import normalize_offers
+from offer import (
+    normalize_offers,
+    OfferExtractor,
+)
 
 from currency import CurrencyConverter
 
@@ -54,21 +57,39 @@ class SavvyCore:
             GlobalSearchEngine()
         )
 
-        # Demo source
+        # =========================
+        # SEARCH ADAPTERS
+        # =========================
+
         self.search_engine.add_adapter(
             DemoAdapter()
         )
 
-        # Бесплатный web-search
         self.search_engine.add_adapter(
             DuckDuckGoAdapter(
                 max_results=5
             )
         )
 
+        # =========================
+        # OFFER EXTRACTOR
+        # =========================
+
+        self.offer_extractor = (
+            OfferExtractor()
+        )
+
+        # =========================
+        # CURRENCY
+        # =========================
+
         self.currency_converter = (
             CurrencyConverter()
         )
+
+        # =========================
+        # DEAL ENGINE
+        # =========================
 
         self.deal_engine = (
             DealEngine(
@@ -77,6 +98,10 @@ class SavvyCore:
                 )
             )
         )
+
+    # =========================
+    # PROCESS
+    # =========================
 
     def process(
         self,
@@ -87,32 +112,64 @@ class SavvyCore:
             request
         )
 
+        # =========================
+        # INPUT
+        # =========================
+
         input_data = (
-            self._parse_input(request)
+            self._parse_input(
+                request
+            )
         )
+
+        # =========================
+        # INTENT
+        # =========================
 
         intent = detect_intent(
             text=request.text,
-            input_type=input_data["type"],
+            input_type=input_data[
+                "type"
+            ],
         )
+
+        # =========================
+        # PRODUCT IDENTITY
+        # =========================
 
         product = identify_product(
             text=request.text,
-            input_type=input_data["type"],
+            input_type=input_data[
+                "type"
+            ],
         )
+
+        # =========================
+        # PRODUCT DNA
+        # =========================
 
         product_dna = build_product_dna(
             product=product,
             user=request.user,
         )
 
+        # =========================
+        # SEARCH PLAN
+        # =========================
+
         search_plan = build_search_plan(
             product_dna=product_dna,
         )
 
+        # =========================
+        # GLOBAL SEARCH
+        # =========================
+
         raw_offers = []
 
-        if search_plan.get("queries"):
+        if search_plan.get(
+            "queries"
+        ):
 
             raw_offers = (
                 self.search_engine.search(
@@ -134,19 +191,135 @@ class SavvyCore:
                 )
             )
 
+        # =========================
+        # OFFER EXTRACTION
+        # =========================
+
+        enriched_offers = []
+
+        for offer in raw_offers:
+
+            url = offer.get(
+                "url"
+            )
+
+            if not url:
+
+                enriched_offers.append(
+                    offer
+                )
+
+                continue
+
+            extracted = (
+                self.offer_extractor.extract(
+                    url=url,
+                    fallback=offer,
+                )
+            )
+
+            enriched_offer = {
+                **offer,
+
+                "product": {
+                    "title":
+                        extracted.get(
+                            "title"
+                        ),
+
+                    "brand":
+                        extracted.get(
+                            "brand"
+                        ),
+                },
+
+                "price":
+                    extracted.get(
+                        "price"
+                    ),
+
+                "currency":
+                    extracted.get(
+                        "currency"
+                    )
+                    or offer.get(
+                        "currency"
+                    ),
+
+                "seller":
+                    extracted.get(
+                        "seller"
+                    )
+                    or offer.get(
+                        "seller"
+                    ),
+
+                "availability":
+                    extracted.get(
+                        "availability"
+                    )
+                    or offer.get(
+                        "availability"
+                    ),
+
+                "description":
+                    extracted.get(
+                        "description"
+                    ),
+
+                "image":
+                    extracted.get(
+                        "image"
+                    ),
+
+                "url":
+                    extracted.get(
+                        "url"
+                    )
+                    or url,
+
+                "extracted":
+                    extracted.get(
+                        "extracted",
+                        False,
+                    ),
+            }
+
+            enriched_offers.append(
+                enriched_offer
+            )
+
+        raw_offers = (
+            enriched_offers
+        )
+
+        # =========================
+        # NORMALIZATION
+        # =========================
+
         offers = normalize_offers(
             raw_offers
         )
 
-        offers = calculate_offers_real_cost(
-            offers=offers,
-            target_currency=(
-                request.user.currency
-            ),
-            converter=(
-                self.currency_converter
-            ),
+        # =========================
+        # REAL COST
+        # =========================
+
+        offers = (
+            calculate_offers_real_cost(
+                offers=offers,
+                target_currency=(
+                    request.user.currency
+                ),
+                converter=(
+                    self.currency_converter
+                ),
+            )
         )
+
+        # =========================
+        # DEAL ENGINE
+        # =========================
 
         deal_analysis = (
             self.deal_engine.analyze(
@@ -163,12 +336,20 @@ class SavvyCore:
         )
 
         if classified_offers:
-            offers = classified_offers
+
+            offers = (
+                classified_offers
+            )
+
+        # =========================
+        # RESPONSE
+        # =========================
 
         return SavvyResponse(
             success=True,
             intent=intent,
             data={
+
                 "region":
                     request.user.region,
 
@@ -198,6 +379,10 @@ class SavvyCore:
             },
         )
 
+    # =========================
+    # REQUEST PREPARATION
+    # =========================
+
     def _prepare_request(
         self,
         request: SavvyRequest,
@@ -215,6 +400,10 @@ class SavvyCore:
                     .default_currency
                 ),
             )
+
+    # =========================
+    # INPUT PARSER
+    # =========================
 
     def _parse_input(
         self,
