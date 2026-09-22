@@ -207,6 +207,11 @@ def handle_text(message):
         {},
     )
 
+    offers = response.data.get(
+        "offers",
+        [],
+    )
+
     intent = response.intent
 
     # =========================
@@ -249,7 +254,7 @@ def handle_text(message):
     )
 
     # =========================
-    # BASIC RESULT
+    # PRODUCT IDENTITY
     # =========================
 
     lines = [
@@ -420,7 +425,96 @@ def handle_text(message):
         )
 
     # =========================
-    # SEND
+    # GLOBAL SEARCH
+    # =========================
+
+    lines.extend(
+        [
+
+            "",
+
+            "🌎 GLOBAL SEARCH",
+
+            "",
+
+            f"Найдено предложений: "
+            f"{len(offers)}",
+        ]
+    )
+
+    # =========================
+    # OFFERS
+    # =========================
+
+    if offers:
+
+        for index, offer in enumerate(
+            offers,
+            start=1,
+        ):
+
+            lines.extend(
+                [
+
+                    "",
+
+                    f"🛍 OFFER #{index}",
+
+                    f"Товар: "
+                    f"{offer.get('title', '—')}",
+
+                    f"🏪 Источник: "
+                    f"{offer.get('source', '—')}",
+
+                    f"💰 Цена: "
+                    f"{offer.get('price', '—')} "
+                    f"{offer.get('currency', '')}",
+
+                    f"👤 Продавец: "
+                    f"{offer.get('seller', '—')}",
+
+                    f"📦 Состояние: "
+                    f"{offer.get('condition', '—')}",
+                ]
+            )
+
+            if offer.get("delivery") is not None:
+
+                lines.append(
+                    f"🚚 Доставка: "
+                    f"{offer.get('delivery')}"
+                )
+
+            if offer.get("region"):
+
+                lines.append(
+                    f"🌍 Регион предложения: "
+                    f"{offer.get('region')}"
+                )
+
+            if offer.get("url"):
+
+                lines.append(
+                    f"🔗 {offer.get('url')}"
+                )
+
+    else:
+
+        lines.extend(
+            [
+
+                "",
+
+                "ℹ️ Реальных предложений "
+                "пока нет.",
+
+                "Тестовый Global Search "
+                "будет подключён через адаптеры.",
+            ]
+        )
+
+    # =========================
+    # SEND RESULT
     # =========================
 
     bot.send_message(
