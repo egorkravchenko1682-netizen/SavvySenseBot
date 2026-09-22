@@ -60,10 +60,6 @@ class SavvyCore:
             GlobalSearchEngine()
         )
 
-        # =========================
-        # SEARCH ADAPTERS
-        # =========================
-
         self.search_engine.add_adapter(
             DemoAdapter()
         )
@@ -74,33 +70,17 @@ class SavvyCore:
             )
         )
 
-        # =========================
-        # OFFER EXTRACTOR
-        # =========================
-
         self.offer_extractor = (
             OfferExtractor()
         )
-
-        # =========================
-        # PRODUCT MATCHER
-        # =========================
 
         self.product_matcher = (
             ProductMatcher()
         )
 
-        # =========================
-        # CURRENCY
-        # =========================
-
         self.currency_converter = (
             CurrencyConverter()
         )
-
-        # =========================
-        # DEAL ENGINE
-        # =========================
 
         self.deal_engine = (
             DealEngine(
@@ -119,19 +99,11 @@ class SavvyCore:
             request
         )
 
-        # =========================
-        # INPUT
-        # =========================
-
         input_data = (
             self._parse_input(
                 request
             )
         )
-
-        # =========================
-        # INTENT
-        # =========================
 
         intent = detect_intent(
             text=request.text,
@@ -140,10 +112,6 @@ class SavvyCore:
             ],
         )
 
-        # =========================
-        # PRODUCT IDENTITY
-        # =========================
-
         product = identify_product(
             text=request.text,
             input_type=input_data[
@@ -151,26 +119,14 @@ class SavvyCore:
             ],
         )
 
-        # =========================
-        # PRODUCT DNA
-        # =========================
-
         product_dna = build_product_dna(
             product=product,
             user=request.user,
         )
 
-        # =========================
-        # SEARCH PLAN
-        # =========================
-
         search_plan = build_search_plan(
             product_dna=product_dna,
         )
-
-        # =========================
-        # GLOBAL SEARCH
-        # =========================
 
         raw_offers = []
 
@@ -198,9 +154,10 @@ class SavvyCore:
                 )
             )
 
-        # =========================
-        # OFFER EXTRACTION
-        # =========================
+        print(
+            "SAVVY DEBUG: "
+            f"raw offers = {len(raw_offers)}"
+        )
 
         enriched_offers = []
 
@@ -339,10 +296,6 @@ class SavvyCore:
             enriched_offers
         )
 
-        # =========================
-        # PRODUCT MATCHING
-        # =========================
-
         matched_offers = []
         rejected_offers = []
 
@@ -353,6 +306,32 @@ class SavvyCore:
                     product=product,
                     offer=offer,
                 )
+            )
+
+            title = (
+                offer.get(
+                    "product",
+                    {}
+                ).get(
+                    "title"
+                )
+                if isinstance(
+                    offer.get(
+                        "product"
+                    ),
+                    dict,
+                )
+                else offer.get(
+                    "title"
+                )
+            )
+
+            print(
+                "SAVVY MATCH: "
+                f"{title} | "
+                f"type={match.get('match_type')} | "
+                f"score={match.get('match_score')} | "
+                f"reason={match.get('match_reason')}"
             )
 
             enriched_offer = {
@@ -394,17 +373,15 @@ class SavvyCore:
                 enriched_offer
             )
 
-        # =========================
-        # NORMALIZATION
-        # =========================
+        print(
+            "SAVVY DEBUG: "
+            f"matched={len(matched_offers)}, "
+            f"rejected={len(rejected_offers)}"
+        )
 
         offers = normalize_offers(
             matched_offers
         )
-
-        # =========================
-        # REAL COST
-        # =========================
 
         offers = (
             calculate_offers_real_cost(
@@ -417,10 +394,6 @@ class SavvyCore:
                 ),
             )
         )
-
-        # =========================
-        # DEAL ENGINE
-        # =========================
 
         deal_analysis = (
             self.deal_engine.analyze(
@@ -441,10 +414,6 @@ class SavvyCore:
             offers = (
                 classified_offers
             )
-
-        # =========================
-        # FINAL RESPONSE
-        # =========================
 
         return SavvyResponse(
             success=True,
@@ -520,10 +489,6 @@ class SavvyCore:
             },
         )
 
-    # ==================================================
-    # REQUEST PREPARATION
-    # ==================================================
-
     def _prepare_request(
         self,
         request: SavvyRequest,
@@ -542,10 +507,6 @@ class SavvyCore:
                     .default_currency
                 ),
             )
-
-    # ==================================================
-    # INPUT PARSER
-    # ==================================================
 
     def _parse_input(
         self,
