@@ -1,154 +1,85 @@
 from typing import Any
 
 
-def _to_float(value: Any) -> float:
-    """
-    Безопасно преобразует значение в число.
-    """
-
-    if value is None:
-        return 0.0
-
-    if isinstance(value, (int, float)):
-        return float(value)
-
-    try:
-        cleaned = (
-            str(value)
-            .replace(",", ".")
-            .replace("$", "")
-            .replace("€", "")
-            .replace("₽", "")
-            .strip()
-        )
-
-        return float(cleaned)
-
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def normalize_offer(
-    offer: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Приводит предложение любого адаптера
-    к единому формату SAVVY.
-    """
-
-    price = _to_float(
-        offer.get("price")
-    )
-
-    delivery = _to_float(
-        offer.get("delivery")
-    )
-
-    taxes = _to_float(
-        offer.get("taxes")
-    )
-
-    duties = _to_float(
-        offer.get("duties")
-    )
-
-    fees = _to_float(
-        offer.get("fees")
-    )
-
-    total_cost = (
-        price
-        + delivery
-        + taxes
-        + duties
-        + fees
-    )
-
-    return {
-        "product": {
-            "title": offer.get(
-                "title"
-            ),
-            "brand": offer.get(
-                "brand"
-            ),
-            "category": offer.get(
-                "category"
-            ),
-        },
-
-        "source": offer.get(
-            "source"
-        ),
-
-        "seller": offer.get(
-            "seller"
-        ),
-
-        "price": price,
-
-        "currency": offer.get(
-            "currency",
-            "USD",
-        ),
-
-        "delivery": delivery,
-
-        "taxes": taxes,
-
-        "duties": duties,
-
-        "fees": fees,
-
-        "total_cost": round(
-            total_cost,
-            2,
-        ),
-
-        "condition": offer.get(
-            "condition",
-            "unknown",
-        ),
-
-        "availability": offer.get(
-            "availability",
-            "unknown",
-        ),
-
-        "region": offer.get(
-            "region"
-        ),
-
-        "url": offer.get(
-            "url"
-        ),
-    }
-
-
 def normalize_offers(
     offers: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """
-    Нормализует список предложений.
-    """
 
     normalized = []
 
     for offer in offers:
 
-        try:
+        raw_price = offer.get("price")
 
-            normalized.append(
-                normalize_offer(
-                    offer
-                )
-            )
+        price = None
 
-        except Exception as error:
+        if raw_price is not None:
+            try:
+                price = float(raw_price)
+            except (TypeError, ValueError):
+                price = None
 
-            print(
-                f"Offer normalization "
-                f"failed: {error}"
-            )
+        delivery = _to_float_or_none(
+            offer.get("delivery")
+        )
+
+        taxes = _to_float_or_none(
+            offer.get("taxes")
+        )
+
+        duties = _to_float_or_none(
+            offer.get("duties")
+        )
+
+        fees = _to_float_or_none(
+            offer.get("fees")
+        )
+
+        normalized_offer = {
+            **offer,
+
+            "price": price,
+
+            "delivery": delivery,
+            "taxes": taxes,
+            "duties": duties,
+            "fees": fees,
+
+            "price_known": (
+                price is not None
+            ),
+
+            "delivery_known": (
+                delivery is not None
+            ),
+
+            "taxes_known": (
+                taxes is not None
+            ),
+
+            "duties_known": (
+                duties is not None
+            ),
+
+            "fees_known": (
+                fees is not None
+            ),
+        }
+
+        normalized.append(
+            normalized_offer
+        )
 
     return normalized
+
+
+def _to_float_or_none(
+    value: Any,
+):
+    if value is None:
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
