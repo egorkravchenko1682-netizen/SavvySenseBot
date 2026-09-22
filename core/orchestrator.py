@@ -18,6 +18,7 @@ from intent import detect_intent
 from product import (
     identify_product,
     build_product_dna,
+    build_search_plan,
 )
 
 
@@ -53,6 +54,10 @@ class SavvyCore:
             user=request.user,
         )
 
+        search_plan = build_search_plan(
+            product_dna=product_dna,
+        )
+
         return SavvyResponse(
             success=True,
             intent=intent,
@@ -65,6 +70,8 @@ class SavvyCore:
                 "product": product,
 
                 "product_dna": product_dna,
+
+                "search_plan": search_plan,
             },
         )
 
