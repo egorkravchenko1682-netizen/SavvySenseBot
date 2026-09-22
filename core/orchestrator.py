@@ -39,7 +39,10 @@ from cost.calculator import (
     calculate_offers_real_cost,
 )
 
-from deal import DealEngine
+from deal import (
+    DealEngine,
+    ProductMatcher,
+)
 
 
 class SavvyCore:
@@ -80,6 +83,14 @@ class SavvyCore:
         )
 
         # =========================
+        # PRODUCT MATCHER
+        # =========================
+
+        self.product_matcher = (
+            ProductMatcher()
+        )
+
+        # =========================
         # CURRENCY
         # =========================
 
@@ -98,10 +109,6 @@ class SavvyCore:
                 )
             )
         )
-
-    # =========================
-    # PROCESS
-    # =========================
 
     def process(
         self,
@@ -225,16 +232,49 @@ class SavvyCore:
                     "title":
                         extracted.get(
                             "title"
+                        )
+                        or offer.get(
+                            "title"
                         ),
 
                     "brand":
                         extracted.get(
                             "brand"
+                        )
+                        or offer.get(
+                            "brand"
+                        ),
+
+                    "category":
+                        offer.get(
+                            "category"
+                        ),
+
+                    "product_type":
+                        offer.get(
+                            "product_type"
+                        ),
+
+                    "model":
+                        offer.get(
+                            "model"
+                        ),
+
+                    "attributes":
+                        offer.get(
+                            "attributes",
+                            {},
                         ),
                 },
 
                 "price":
                     extracted.get(
+                        "price"
+                    )
+                    if extracted.get(
+                        "price"
+                    ) is not None
+                    else offer.get(
                         "price"
                     ),
 
@@ -265,10 +305,16 @@ class SavvyCore:
                 "description":
                     extracted.get(
                         "description"
+                    )
+                    or offer.get(
+                        "description"
                     ),
 
                 "image":
                     extracted.get(
+                        "image"
+                    )
+                    or offer.get(
                         "image"
                     ),
 
@@ -294,11 +340,66 @@ class SavvyCore:
         )
 
         # =========================
+        # PRODUCT MATCHING
+        # =========================
+
+        matched_offers = []
+        rejected_offers = []
+
+        for offer in raw_offers:
+
+            match = (
+                self.product_matcher.match(
+                    product=product,
+                    offer=offer,
+                )
+            )
+
+            enriched_offer = {
+                **offer,
+
+                "match_type":
+                    match.get(
+                        "match_type"
+                    ),
+
+                "match_score":
+                    match.get(
+                        "match_score"
+                    ),
+
+                "match_reason":
+                    match.get(
+                        "match_reason"
+                    ),
+
+                "match_details":
+                    match,
+            }
+
+            if (
+                match.get(
+                    "match_type"
+                )
+                == "rejected"
+            ):
+
+                rejected_offers.append(
+                    enriched_offer
+                )
+
+                continue
+
+            matched_offers.append(
+                enriched_offer
+            )
+
+        # =========================
         # NORMALIZATION
         # =========================
 
         offers = normalize_offers(
-            raw_offers
+            matched_offers
         )
 
         # =========================
@@ -342,14 +443,15 @@ class SavvyCore:
             )
 
         # =========================
-        # RESPONSE
+        # FINAL RESPONSE
         # =========================
 
         return SavvyResponse(
             success=True,
-            intent=intent,
-            data={
 
+            intent=intent,
+
+            data={
                 "region":
                     request.user.region,
 
@@ -371,17 +473,56 @@ class SavvyCore:
                 "raw_offers":
                     raw_offers,
 
+                "matched_offers":
+                    matched_offers,
+
+                "rejected_offers":
+                    rejected_offers,
+
                 "offers":
                     offers,
 
                 "deal_analysis":
                     deal_analysis,
+
+                "matching": {
+                    "total_candidates":
+                        len(raw_offers),
+
+                    "accepted":
+                        len(matched_offers),
+
+                    "rejected":
+                        len(rejected_offers),
+
+                    "exact":
+                        sum(
+                            1
+                            for offer
+                            in matched_offers
+                            if offer.get(
+                                "match_type"
+                            )
+                            == "exact"
+                        ),
+
+                    "similar":
+                        sum(
+                            1
+                            for offer
+                            in matched_offers
+                            if offer.get(
+                                "match_type"
+                            )
+                            == "similar"
+                        ),
+                },
             },
         )
 
-    # =========================
+    # ==================================================
     # REQUEST PREPARATION
-    # =========================
+    # ==================================================
 
     def _prepare_request(
         self,
@@ -395,15 +536,16 @@ class SavvyCore:
                     self.config
                     .default_region
                 ),
+
                 currency=(
                     self.config
                     .default_currency
                 ),
             )
 
-    # =========================
+    # ==================================================
     # INPUT PARSER
-    # =========================
+    # ==================================================
 
     def _parse_input(
         self,
