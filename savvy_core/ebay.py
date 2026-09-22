@@ -18,13 +18,8 @@ class EbayProvider:
                 "EBAY_CLIENT_ID or EBAY_CLIENT_SECRET is not configured"
             )
 
-        credentials = (
-            f"{client_id}:{client_secret}"
-        ).encode()
-
-        encoded = base64.b64encode(
-            credentials
-        ).decode()
+        credentials = f"{client_id}:{client_secret}".encode()
+        encoded = base64.b64encode(credentials).decode()
 
         headers = {
             "Authorization": f"Basic {encoded}",
@@ -45,26 +40,20 @@ class EbayProvider:
 
                 if response.status != 200:
                     text = await response.text()
-
                     raise RuntimeError(
-                        f"eBay token error: "
-                        f"{response.status} {text}"
+                        f"eBay token error: {response.status} {text}"
                     )
 
                 result = await response.json()
-
                 return result["access_token"]
 
-        async def search(
+    async def search(
         self,
         request: SearchRequest,
     ) -> list[Offer]:
 
-        print(
-            f"[SAVVY] eBay search: {request.original_query}"
-        )
-
         token = await self.get_token()
+
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -84,36 +73,29 @@ class EbayProvider:
 
                 if response.status != 200:
                     text = await response.text()
-
                     raise RuntimeError(
-                        f"eBay search error: "
-                        f"{response.status} {text}"
+                        f"eBay search error: {response.status} {text}"
                     )
 
                 data = await response.json()
 
         offers = []
 
-        for item in data.get(
-            "itemSummaries",
-            [],
-        ):
+        for item in data.get("itemSummaries", []):
 
-            price_data = item.get(
-                "price",
-                {},
-            )
+            price_data = item.get("price", {})
 
-            price = float(
-                price_data.get(
-                    "value",
-                    0,
-                )
-            )
+            try:
+                price = float(price_data.get("value", 0))
+            except (TypeError, ValueError):
+                continue
+
+            if price <= 0:
+                continue
 
             currency = price_data.get(
                 "currency",
-                request.currency,
+                request.currency or "USD",
             )
 
             offers.append(
