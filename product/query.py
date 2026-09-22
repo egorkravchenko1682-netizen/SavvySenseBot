@@ -4,16 +4,9 @@ from typing import Any
 def build_search_queries(
     product_dna: dict[str, Any],
 ) -> list[str]:
-    """
-    Создаёт набор поисковых запросов
-    на основе Product DNA.
-
-    Не использует AI API и внешние сервисы.
-    """
 
     name = product_dna.get("name")
     brand = product_dna.get("brand")
-    category = product_dna.get("category")
     attributes = product_dna.get("attributes", {})
 
     if not name:
@@ -22,9 +15,7 @@ def build_search_queries(
     storage = attributes.get("storage")
     color = attributes.get("color")
     material = attributes.get("material")
-    gender = attributes.get("gender")
 
-    # Базовое название товара
     parts = []
 
     if brand and brand.lower() not in name.lower():
@@ -37,32 +28,14 @@ def build_search_queries(
 
     base_query = " ".join(parts)
 
-    queries = []
+    queries = [
+        base_query,
+        f"{base_query} buy",
+        f"{base_query} price",
+        f"{base_query} cheaper",
+        f"{base_query} international",
+    ]
 
-    # 1. Точный товар
-    queries.append(base_query)
-
-    # 2. Покупка
-    queries.append(
-        f"{base_query} buy"
-    )
-
-    # 3. Цена
-    queries.append(
-        f"{base_query} price"
-    )
-
-    # 4. Поиск дешевле
-    queries.append(
-        f"{base_query} cheaper"
-    )
-
-    # 5. Международный поиск
-    queries.append(
-        f"{base_query} international"
-    )
-
-    # Дополнительные характеристики
     if color:
         queries.append(
             f"{base_query} {color}"
@@ -73,47 +46,32 @@ def build_search_queries(
             f"{base_query} {material}"
         )
 
-    if gender:
-        queries.append(
-            f"{base_query} {gender}"
-        )
-
-    # Убираем дубликаты,
-    # сохраняя порядок.
-    unique_queries = []
+    # Убираем дубликаты
+    result = []
 
     for query in queries:
+
         query = query.strip()
 
-        if query and query not in unique_queries:
-            unique_queries.append(query)
+        if query and query not in result:
+            result.append(query)
 
-    return unique_queries
+    return result
 
 
 def build_search_plan(
     product_dna: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Формирует полный план будущего поиска.
-    """
-
-    queries = build_search_queries(
-        product_dna
-    )
 
     search_scope = product_dna.get(
         "search_scope",
         {},
     )
 
-    budget = product_dna.get(
-        "budget",
-        {},
-    )
-
     return {
-        "queries": queries,
+        "queries": build_search_queries(
+            product_dna
+        ),
 
         "region": product_dna.get(
             "region"
@@ -123,7 +81,10 @@ def build_search_plan(
             "currency"
         ),
 
-        "budget": budget,
+        "budget": product_dna.get(
+            "budget",
+            {},
+        ),
 
         "exact_product": search_scope.get(
             "exact_product",
