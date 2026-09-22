@@ -5,23 +5,14 @@ class DealEngine:
     """
     Анализирует нормализованные предложения SAVVY.
 
-    Deal Engine определяет:
-    - exact match
-    - similar product
-    - over budget
-    - best exact match
-
-    Важно:
-    classified_offers сохраняет ВСЕ предложения
-    в исходном порядке и добавляет каждому
-    match_type.
+    Предложения без известной цены не считаются
+    дешевле предложений с известной ценой.
     """
 
     def __init__(
         self,
         max_results: int = 20,
     ):
-
         self.max_results = max_results
 
     def analyze(
@@ -33,12 +24,9 @@ class DealEngine:
         exact_matches = []
         similar_matches = []
         over_budget = []
-
         classified_offers = []
 
-        budget = product.get(
-            "budget"
-        )
+        budget = product.get("budget")
 
         target_currency = (
             product.get("currency")
@@ -52,12 +40,15 @@ class DealEngine:
                 {},
             )
 
-            total_cost = float(
+            total_cost = offer.get(
+                "total_cost"
+            )
+
+            cost_known = (
                 offer.get(
-                    "total_cost",
-                    0,
+                    "cost_known"
                 )
-                or 0
+                and total_cost is not None
             )
 
             offer_currency = (
@@ -83,7 +74,6 @@ class DealEngine:
 
             classified_offer = {
                 **offer,
-
                 "match_type":
                     match_type,
             }
@@ -100,9 +90,10 @@ class DealEngine:
 
                 if (
                     budget is not None
+                    and cost_known
                     and offer_currency
                     == target_currency
-                    and total_cost
+                    and float(total_cost)
                     > float(budget)
                 ):
 
@@ -116,91 +107,64 @@ class DealEngine:
                     classified_offer
                 )
 
-        # =========================
-        # SORT
-        # =========================
-
         exact_matches.sort(
-            key=lambda item:
-            float(
-                item.get(
-                    "total_cost",
-                    0,
-                )
-                or 0
-            )
+            key=self._sort_key
         )
 
         similar_matches.sort(
-            key=lambda item:
-            float(
-                item.get(
-                    "total_cost",
-                    0,
-                )
-                or 0
-            )
+            key=self._sort_key
         )
 
         over_budget.sort(
-            key=lambda item:
-            float(
-                item.get(
-                    "total_cost",
-                    0,
-                )
-                or 0
-            )
+            key=self._sort_key
         )
-
-        # =========================
-        # CHEAPER
-        # =========================
 
         cheaper = []
 
-        if exact_matches:
+        priced_exact = [
+            offer
+            for offer in exact_matches
+            if offer.get(
+                "cost_known"
+            )
+            and offer.get(
+                "total_cost"
+            ) is not None
+        ]
 
-            cheapest_cost = float(
-                exact_matches[0].get(
-                    "total_cost",
-                    0,
+        if priced_exact:
+
+            cheapest_cost = min(
+                float(
+                    offer.get(
+                        "total_cost"
+                    )
                 )
-                or 0
+                for offer in priced_exact
             )
 
-            for offer in exact_matches:
+            for offer in priced_exact:
 
-                if float(
-                    offer.get(
-                        "total_cost",
-                        0,
+                if (
+                    float(
+                        offer.get(
+                            "total_cost"
+                        )
                     )
-                    or 0
-                ) <= cheapest_cost:
+                    <= cheapest_cost
+                ):
 
                     cheaper.append(
                         offer
                     )
 
-        # =========================
-        # BEST EXACT
-        # =========================
+        best_exact = None
 
-        best_exact = (
-            exact_matches[0]
-            if exact_matches
-            else None
-        )
+        if priced_exact:
 
-        # =========================
-        # RESULT
-        # =========================
+            best_exact = priced_exact[0]
 
         return {
-
-            # Все предложения уже
-            # с match_type
             "classified_offers":
                 classified_offers,
 
@@ -228,7 +192,6 @@ class DealEngine:
                 best_exact,
 
             "counts": {
-
                 "exact":
                     len(exact_matches),
 
@@ -240,9 +203,32 @@ class DealEngine:
             },
         }
 
-    # =========================
-    # EXACT MATCH
-    # =========================
+    @staticmethod
+    def _sort_key(
+        offer: dict[str, Any],
+    ):
+
+        cost_known = (
+            offer.get("cost_known")
+            and offer.get("total_cost")
+            is not None
+        )
+
+        if not cost_known:
+
+            return (
+                1,
+                float("inf"),
+            )
+
+        return (
+            0,
+            float(
+                offer.get(
+                    "total_cost"
+                )
+            ),
+        )
 
     def _is_exact_match(
         self,
@@ -250,12 +236,12 @@ class DealEngine:
         offer_product: dict[str, Any],
     ) -> bool:
 
-        requested_name = (
-            product.get("name")
+        requested_name = product.get(
+            "name"
         )
 
-        offer_title = (
-            offer_product.get("title")
+        offer_title = offer_product.get(
+            "title"
         )
 
         if not requested_name:
@@ -272,23 +258,18 @@ class DealEngine:
             offer_title
         )
 
-        # Полное совпадение названия
         if requested in offered:
             return True
 
         if offered in requested:
             return True
 
-        # =========================
-        # BRAND
-        # =========================
-
-        requested_brand = (
-            product.get("brand")
+        requested_brand = product.get(
+            "brand"
         )
 
-        offered_brand = (
-            offer_product.get("brand")
+        offered_brand = offer_product.get(
+            "brand"
         )
 
         if (
@@ -302,10 +283,6 @@ class DealEngine:
             )
         ):
             return False
-
-        # =========================
-        # STORAGE
-        # =========================
 
         requested_attributes = (
             product.get(
@@ -328,10 +305,6 @@ class DealEngine:
 
                 return False
 
-        # =========================
-        # BRAND IN TITLE
-        # =========================
-
         normalized_brand = (
             self._normalize_text(
                 requested_brand or ""
@@ -346,10 +319,6 @@ class DealEngine:
             )
 
         return False
-
-    # =========================
-    # NORMALIZE TEXT
-    # =========================
 
     @staticmethod
     def _normalize_text(
