@@ -7,11 +7,13 @@ def build_search_queries(
     """
     Формирует поисковые запросы из Product DNA.
 
-    Критические атрибуты всегда стараемся включать
-    в основной запрос.
+    ВАЖНО:
+    Search Query Builder отвечает за поиск кандидатов,
+    а не за окончательное определение совпадения.
 
-    Дополнительные запросы нужны для расширения
-    поиска, но не должны ослаблять Product Matching.
+    Поэтому основной запрос не перегружается всеми
+    возможными атрибутами. Строгая проверка выполняется
+    позже через ProductMatcher.
     """
 
     name = (
@@ -35,13 +37,6 @@ def build_search_queries(
         or ""
     ).strip()
 
-    product_type = (
-        product_dna.get(
-            "product_type"
-        )
-        or ""
-    ).strip()
-
     attributes = product_dna.get(
         "attributes",
         {},
@@ -54,89 +49,161 @@ def build_search_queries(
         )
     )
 
-    queries = []
+    queries: list[str] = []
 
-    # ==========================================
-    # ОСНОВНОЙ ТОЧНЫЙ ЗАПРОС
-    # ==========================================
+    # ==================================================
+    # БАЗОВОЕ НАЗВАНИЕ
+    # ==================================================
 
-    exact_parts = []
+    base_name = ""
 
-    if brand:
-        exact_parts.append(
-            brand
+    if brand and model:
+
+        base_name = _clean_query(
+            [
+                brand,
+                model,
+            ]
         )
 
-    if model:
-        exact_parts.append(
-            model
-        )
+    elif model:
+
+        base_name = model
+
     elif name:
-        exact_parts.append(
-            name
+
+        base_name = _clean_query(
+            [
+                name,
+            ]
         )
 
-    if product_type and (
-        product_type
-        not in exact_parts
-    ):
-        exact_parts.append(
-            product_type
-        )
+    # ==================================================
+    # КРИТИЧЕСКИЕ АТРИБУТЫ
+    # ==================================================
 
-    exact_parts.extend(
+    critical_values = (
         _important_attribute_values(
             required_attributes
         )
     )
 
-    exact_query = _clean_query(
-        exact_parts
-    )
+    # Основной точный запрос.
+    #
+    # Например:
+    #
+    # Apple iPhone 15 Pro Max 256 GB
+    #
+    # а не:
+    #
+    # iPhone 15 Pro Max smartphone 256 GB
+    #
+    # Тип товара не нужен поисковику,
+    # поскольку Matcher проверит его позже.
 
-    if exact_query:
+    if base_name:
 
-        queries.append(
-            exact_query
+        exact_query = _clean_query(
+            [
+                base_name,
+                *critical_values,
+            ]
         )
 
-    # ==========================================
+        if exact_query:
+            queries.append(
+                exact_query
+            )
+
+    # ==================================================
+    # ЗАПРОС БЕЗ ДОПОЛНИТЕЛЬНЫХ АТРИБУТОВ
+    # ==================================================
+
+    if base_name:
+
+        queries.append(
+            base_name
+        )
+
+    # ==================================================
     # BUY
-    # ==========================================
+    # ==================================================
 
-    if exact_query:
+    if base_name:
 
-        queries.append(
-            f"{exact_query} buy"
+        buy_query = _clean_query(
+            [
+                base_name,
+                *critical_values,
+                "buy",
+            ]
         )
 
-        queries.append(
-            f"{exact_query} price"
+        if buy_query:
+            queries.append(
+                buy_query
+            )
+
+    # ==================================================
+    # PRICE
+    # ==================================================
+
+    if base_name:
+
+        price_query = _clean_query(
+            [
+                base_name,
+                *critical_values,
+                "price",
+            ]
         )
 
-    # ==========================================
+        if price_query:
+            queries.append(
+                price_query
+            )
+
+    # ==================================================
     # CHEAPER
-    # ==========================================
+    # ==================================================
 
-    if exact_query:
+    if base_name:
 
-        queries.append(
-            f"{exact_query} cheaper"
+        cheaper_query = _clean_query(
+            [
+                base_name,
+                *critical_values,
+                "cheaper",
+            ]
         )
 
-    # ==========================================
+        if cheaper_query:
+            queries.append(
+                cheaper_query
+            )
+
+    # ==================================================
     # INTERNATIONAL
-    # ==========================================
+    # ==================================================
 
-    if exact_query:
+    if base_name:
 
-        queries.append(
-            f"{exact_query} international"
+        international_query = _clean_query(
+            [
+                base_name,
+                *critical_values,
+                "international",
+            ]
         )
 
-    # ==========================================
-    # ДОПОЛНИТЕЛЬНЫЕ ЗАПРОСЫ
-    # ==========================================
+        if international_query:
+            queries.append(
+                international_query
+            )
+
+    # ==================================================
+    # АТРИБУТНЫЕ ВАРИАНТЫ
+    # ==================================================
 
     color = attributes.get(
         "color"
@@ -146,58 +213,69 @@ def build_search_queries(
         "material"
     )
 
-    if color and exact_query:
+    size = attributes.get(
+        "size"
+    )
+
+    capacity = attributes.get(
+        "capacity"
+    )
+
+    # Цвет.
+    if color and base_name:
 
         queries.append(
             _clean_query(
                 [
-                    exact_query,
+                    base_name,
                     str(color),
                 ]
             )
         )
 
-    if material and exact_query:
+    # Материал.
+    if material and base_name:
 
         queries.append(
             _clean_query(
                 [
-                    exact_query,
+                    base_name,
                     str(material),
                 ]
             )
         )
 
-    # ==========================================
-    # УДАЛЕНИЕ ДУБЛИКАТОВ
-    # ==========================================
+    # Размер.
+    if size and base_name:
 
-    unique_queries = []
-
-    for query in queries:
-
-        query = _clean_query(
-            [query]
+        queries.append(
+            _clean_query(
+                [
+                    base_name,
+                    str(size),
+                ]
+            )
         )
 
-        if not query:
-            continue
+    # Ёмкость.
+    if capacity and base_name:
 
-        normalized = (
-            query.lower()
+        queries.append(
+            _clean_query(
+                [
+                    base_name,
+                    str(capacity),
+                ]
+            )
         )
 
-        if normalized in {
-            item.lower()
-            for item in unique_queries
-        }:
-            continue
+    # ==================================================
+    # ДЕДУПЛИКАЦИЯ
+    # ==================================================
 
-        unique_queries.append(
-            query
-        )
-
-    return unique_queries[:10]
+    return _unique_queries(
+        queries
+    )
 
 
 def build_search_plan(
@@ -216,6 +294,13 @@ def build_search_plan(
             "budget"
         )
         or {}
+    )
+
+    search_scope = (
+        product_dna.get(
+            "search_scope",
+            {},
+        )
     )
 
     return {
@@ -248,43 +333,28 @@ def build_search_plan(
             ),
 
         "search_scope":
-            product_dna.get(
-                "search_scope",
-                {},
-            ),
+            search_scope,
 
         "exact_product":
-            product_dna.get(
-                "search_scope",
-                {}
-            ).get(
+            search_scope.get(
                 "exact_product",
                 False,
             ),
 
         "cheaper_offers":
-            product_dna.get(
-                "search_scope",
-                {}
-            ).get(
+            search_scope.get(
                 "cheaper_offers",
                 True,
             ),
 
         "similar_products":
-            product_dna.get(
-                "search_scope",
-                {}
-            ).get(
+            search_scope.get(
                 "similar_products",
                 True,
             ),
 
         "international":
-            product_dna.get(
-                "search_scope",
-                {}
-            ).get(
+            search_scope.get(
                 "international",
                 True,
             ),
@@ -294,6 +364,14 @@ def build_search_plan(
 def _important_attribute_values(
     attributes: dict[str, Any],
 ) -> list[str]:
+    """
+    Возвращает атрибуты, которые действительно
+    полезно передавать поисковику.
+
+    Не добавляем category/product_type автоматически:
+    эти параметры используются преимущественно
+    для последующей валидации результата.
+    """
 
     ordered_keys = [
         "storage",
@@ -327,11 +405,13 @@ def _important_attribute_values(
             (list, tuple),
         ):
 
-            values.extend(
-                str(item)
-                for item in value
-                if item
-            )
+            for item in value:
+
+                if item:
+
+                    values.append(
+                        str(item)
+                    )
 
         else:
 
@@ -367,3 +447,39 @@ def _clean_query(
     return " ".join(
         cleaned
     )
+
+
+def _unique_queries(
+    queries: list[str],
+) -> list[str]:
+
+    result = []
+
+    seen = set()
+
+    for query in queries:
+
+        query = _clean_query(
+            [query]
+        )
+
+        if not query:
+            continue
+
+        normalized = (
+            query.lower()
+            .strip()
+        )
+
+        if normalized in seen:
+            continue
+
+        seen.add(
+            normalized
+        )
+
+        result.append(
+            query
+        )
+
+    return result[:10]
