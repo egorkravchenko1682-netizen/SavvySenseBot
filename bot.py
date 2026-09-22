@@ -11,10 +11,7 @@ from telegram.ext import (
 
 from savvy_core.engine import SavvyEngine
 from savvy_core.models import UserProfile
-from savvy_core.search import (
-    DemoSearchProvider,
-    SearchOrchestrator,
-)
+from savvy_core.search import SearchOrchestrator
 
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -25,11 +22,7 @@ if not TOKEN:
     )
 
 
-search_orchestrator = SearchOrchestrator(
-    providers=[
-        DemoSearchProvider(),
-    ]
-)
+search_orchestrator = SearchOrchestrator()
 
 engine = SavvyEngine(
     search_orchestrator
