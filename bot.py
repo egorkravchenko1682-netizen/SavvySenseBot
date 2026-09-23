@@ -21,7 +21,6 @@ BOT_TOKEN = os.getenv(
 
 
 if not BOT_TOKEN:
-
     raise RuntimeError(
         "BOT_TOKEN is not set"
     )
@@ -40,6 +39,110 @@ savvy = SavvyCore()
 
 
 # =========================
+# TELEGRAM MESSAGE HELPERS
+# =========================
+
+# Telegram позволяет до 4096 символов.
+# Оставляем запас, чтобы служебные символы
+# и форматирование никогда не упирались
+# в жёсткий лимит.
+TELEGRAM_MAX_MESSAGE_LENGTH = 3800
+
+
+def send_long_message(
+    chat_id,
+    text: str,
+):
+    """
+    Безопасно отправляет длинный текст.
+
+    Если сообщение длиннее лимита Telegram,
+    автоматически разбивает его на несколько
+    сообщений.
+
+    Сначала стараемся разбивать по строкам,
+    чтобы карточки товаров не разрывались
+    посреди строки.
+    """
+
+    if not text:
+        return
+
+    text = str(text)
+
+    if len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
+        bot.send_message(
+            chat_id,
+            text,
+        )
+        return
+
+    chunks = []
+    current = ""
+
+    for line in text.split("\n"):
+
+        # Если отдельная строка сама длиннее
+        # допустимого размера — режем её отдельно.
+        if len(line) > TELEGRAM_MAX_MESSAGE_LENGTH:
+
+            if current:
+                chunks.append(
+                    current.rstrip()
+                )
+                current = ""
+
+            for start in range(
+                0,
+                len(line),
+                TELEGRAM_MAX_MESSAGE_LENGTH,
+            ):
+                chunks.append(
+                    line[
+                        start:
+                        start
+                        + TELEGRAM_MAX_MESSAGE_LENGTH
+                    ]
+                )
+
+            continue
+
+        candidate = (
+            line
+            if not current
+            else current + "\n" + line
+        )
+
+        if len(candidate) <= TELEGRAM_MAX_MESSAGE_LENGTH:
+
+            current = candidate
+
+        else:
+
+            if current:
+                chunks.append(
+                    current.rstrip()
+                )
+
+            current = line
+
+    if current:
+        chunks.append(
+            current.rstrip()
+        )
+
+    for chunk in chunks:
+
+        if not chunk:
+            continue
+
+        bot.send_message(
+            chat_id,
+            chunk,
+        )
+
+
+# =========================
 # FORMAT HELPERS
 # =========================
 
@@ -55,11 +158,9 @@ def format_money(
     """
 
     if value is None:
-
         return "неизвестно"
 
     try:
-
         return (
             f"{float(value):.2f} "
             f"{currency}"
@@ -69,7 +170,6 @@ def format_money(
         TypeError,
         ValueError,
     ):
-
         return "неизвестно"
 
 
@@ -86,11 +186,9 @@ def format_price(
     """
 
     if value is None:
-
         return "неизвестна"
 
     try:
-
         return (
             f"{float(value):.2f} "
             f"{currency}"
@@ -100,7 +198,6 @@ def format_price(
         TypeError,
         ValueError,
     ):
-
         return "неизвестна"
 
 
@@ -292,7 +389,6 @@ def handle_text(message):
     text = message.text.strip()
 
     if not text:
-
         return
 
     user = UserContext(
@@ -842,10 +938,13 @@ def handle_text(message):
     # SEND
     # =========================
 
-    bot.send_message(
-        message.chat.id,
+    final_message = "\n".join(
+        lines
+    )
 
-        "\n".join(lines),
+    send_long_message(
+        message.chat.id,
+        final_message,
     )
 
 
