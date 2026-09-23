@@ -16,22 +16,23 @@ class DealComparator:
         offers: list[dict[str, Any]],
     ) -> dict[str, Any]:
 
-        if not offers:
+        comparable = [
+            offer
+            for offer in offers
+            if self._source(offer) is not None
+        ]
+
+        if not comparable:
             return {
                 "cheapest": None,
                 "comparison_known": False,
                 "comparison_source": None,
             }
 
-        cheapest = None
-        comparison_source = None
+        cheapest = comparable[0]
+        comparison_source = self._source(cheapest)
 
-        for offer in offers:
-
-            if cheapest is None:
-                cheapest = offer
-                comparison_source = self._source(offer)
-                continue
+        for offer in comparable[1:]:
 
             result = self.comparator.compare(
                 cheapest,
@@ -42,22 +43,11 @@ class DealComparator:
                 cheapest = offer
                 comparison_source = result["comparison_source"]
 
-            elif result["comparison"] == "first_cheaper":
+            elif result["comparison"] in {
+                "first_cheaper",
+                "equal",
+            }:
                 comparison_source = result["comparison_source"]
-
-        if cheapest is None:
-            return {
-                "cheapest": None,
-                "comparison_known": False,
-                "comparison_source": None,
-            }
-
-        if comparison_source is None:
-            return {
-                "cheapest": None,
-                "comparison_known": False,
-                "comparison_source": None,
-            }
 
         return {
             "cheapest": cheapest,
