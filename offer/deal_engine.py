@@ -6,6 +6,7 @@ from .deal_candidates import DealCandidates
 from .deal_quality_comparator import DealQualityComparator
 from .deal_budget import DealBudget
 from .deal_condition import DealCondition
+from .deal_quality import DealQuality
 from .deal_quality_result import DealQualityResult
 from .review_confidence import ReviewConfidence
 
@@ -18,6 +19,7 @@ class DealEngine:
         self.comparator = DealQualityComparator()
         self.budget = DealBudget()
         self.condition = DealCondition()
+        self.quality = DealQuality()
         self.quality_result = DealQualityResult()
         self.review_confidence = ReviewConfidence()
 
@@ -41,11 +43,12 @@ class DealEngine:
         enriched_offers = []
 
         for offer in filtered_offers:
+
+            enriched_offer = dict(offer)
+
             confidence = self.review_confidence.calculate(
                 offer.get("review_count")
             )
-
-            enriched_offer = dict(offer)
 
             enriched_offer.update(
                 {
@@ -58,6 +61,27 @@ class DealEngine:
                     "review_confidence_known": confidence[
                         "review_confidence_known"
                     ],
+                }
+            )
+
+            quality = self.quality.calculate(
+                seller=enriched_offer,
+                reviews=enriched_offer,
+                review_confidence=confidence,
+            )
+
+            enriched_offer.update(
+                {
+                    "deal_quality": quality.get(
+                        "deal_quality"
+                    ),
+                    "deal_quality_score": quality.get(
+                        "deal_quality_score"
+                    ),
+                    "deal_quality_known": quality.get(
+                        "deal_quality_known",
+                        False,
+                    ),
                 }
             )
 
@@ -166,11 +190,19 @@ class DealEngine:
             "deal_type": deal_type,
             "best_offer": best_offer,
             "comparison_known": True,
-            "comparison_source": result["comparison_source"],
+            "comparison_source": result[
+                "comparison_source"
+            ],
 
-            "deal_quality": quality["deal_quality"],
-            "deal_quality_score": quality["deal_quality_score"],
-            "deal_quality_known": quality["deal_quality_known"],
+            "deal_quality": quality[
+                "deal_quality"
+            ],
+            "deal_quality_score": quality[
+                "deal_quality_score"
+            ],
+            "deal_quality_known": quality[
+                "deal_quality_known"
+            ],
 
             "review_confidence": best_offer.get(
                 "review_confidence"
@@ -183,28 +215,46 @@ class DealEngine:
                 False,
             ),
 
-            "exact_count": candidates["exact_count"],
-            "similar_count": candidates["similar_count"],
+            "exact_count": candidates[
+                "exact_count"
+            ],
+            "similar_count": candidates[
+                "similar_count"
+            ],
 
             "within_budget_count": (
-                exact_budget["within_budget_count"]
-                + similar_budget["within_budget_count"]
+                exact_budget[
+                    "within_budget_count"
+                ]
+                + similar_budget[
+                    "within_budget_count"
+                ]
             ),
 
             "over_budget_count": (
-                exact_budget["over_budget_count"]
-                + similar_budget["over_budget_count"]
+                exact_budget[
+                    "over_budget_count"
+                ]
+                + similar_budget[
+                    "over_budget_count"
+                ]
             ),
 
             "condition_matched_count": (
-                condition_result["matched_count"]
+                condition_result[
+                    "matched_count"
+                ]
             ),
 
             "condition_mismatched_count": (
-                condition_result["mismatched_count"]
+                condition_result[
+                    "mismatched_count"
+                ]
             ),
 
             "condition_unknown_count": (
-                condition_result["unknown_count"]
+                condition_result[
+                    "unknown_count"
+                ]
             ),
         }
