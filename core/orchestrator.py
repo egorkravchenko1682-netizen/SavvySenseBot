@@ -441,30 +441,31 @@ class SavvyCore:
                     "rejected":
                         len(rejected_offers),
 
-"exact": sum(
-    1
-    for offer in matched_offers
-    if (
-        offer.get("match_result")
-        and offer["match_result"].is_exact
-    )
-),
+                    "exact": sum(
+                        1
+                        for offer in matched_offers
+                        if (
+                            offer.get(
+                                "match_result"
+                            )
+                            and offer[
+                                "match_result"
+                            ].is_exact
+                        )
+                    ),
 
-"similar": sum(
-    1
-    for offer in matched_offers
-    if (
-        offer.get("match_result")
-        and offer["match_result"].is_similar
-    )
-),
-                            in matched_offers
-                            if (
-                                offer.get(
-                                    "match_result"
-                                ).is_similar
-                            ),
-                        ),
+                    "similar": sum(
+                        1
+                        for offer in matched_offers
+                        if (
+                            offer.get(
+                                "match_result"
+                            )
+                            and offer[
+                                "match_result"
+                            ].is_similar
+                        )
+                    ),
                 },
             },
         )
