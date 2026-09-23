@@ -1,880 +1,435 @@
-from typing import Optional
+from __future__ import annotations
 
-from .config import SavvyConfig
-from .models import (
-    SavvyRequest,
-    SavvyResponse,
-    UserContext,
-)
+from typing import Any
 
-from input import (
-    parse_text,
-    parse_url,
-    parse_photo,
-)
-
-from intent import detect_intent
-
-from product import (
-    identify_product,
-    build_product_dna,
-    build_search_plan,
-)
-
-from search import GlobalSearchEngine
-
-from search.adapters import (
-    DemoAdapter,
-    DuckDuckGoAdapter,
-)
-
-from offer import (
-    normalize_offers,
-    OfferExtractor,
-)
-
-from currency import CurrencyConverter
-
-from cost.calculator import (
-    calculate_offers_real_cost,
-)
-
-from deal import DealEngine
-
-from matching import (
-    ProductMatcher,
-    RejectedFilter,
-)
+from offer.extractor import OfferExtractor
+from offer.normalize import normalize_offers
+from offer.deal_engine import DealEngine
+from matching import ProductMatcher
 
 
-class SavvyCore:
+class SavvyOrchestrator:
+    """
+    Главный orchestration layer SAVVY SENSE.
+
+    Отвечает только за последовательность обработки:
+
+        query
+          ↓
+        search
+          ↓
+        extraction
+          ↓
+        normalization
+          ↓
+        product matching
+          ↓
+        DealEngine
+
+    Оркестратор не принимает самостоятельных решений
+    о выгодности товара.
+    """
 
     def __init__(
         self,
-        config: Optional[SavvyConfig] = None,
-    ):
-        self.config = (
-            config or SavvyConfig.load()
+        search_engine: Any,
+        extractor: OfferExtractor | None = None,
+        matcher: ProductMatcher | None = None,
+        deal_engine: DealEngine | None = None,
+    ) -> None:
+
+        self.search_engine = search_engine
+
+        self.extractor = (
+            extractor
+            if extractor is not None
+            else OfferExtractor()
         )
 
-        self.search_engine = GlobalSearchEngine()
-
-        self.search_engine.add_adapter(
-            DemoAdapter()
+        self.matcher = (
+            matcher
+            if matcher is not None
+            else ProductMatcher()
         )
 
-        self.search_engine.add_adapter(
-            DuckDuckGoAdapter(
-                max_results=5
-            )
+        self.deal_engine = (
+            deal_engine
+            if deal_engine is not None
+            else DealEngine()
         )
 
-        self.offer_extractor = OfferExtractor()
-
-        self.product_matcher = ProductMatcher()
-
-        self.rejected_filter = RejectedFilter()
-
-        self.currency_converter = CurrencyConverter()
-
-        self.deal_engine = DealEngine(
-            max_results=self.config.max_results
-        )
-
-    def process(
+    def run(
         self,
-        request: SavvyRequest,
-    ) -> SavvyResponse:
+        query: str,
+        budget: float | None = None,
+        budget_currency: str | None = None,
+        requested_condition: str = "any",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Полный pipeline SAVVY SENSE.
+        """
 
-        # =====================================================
-        # REQUEST
-        # =====================================================
+        # -----------------------------------------------------
+        # 1. SEARCH
+        # -----------------------------------------------------
 
-        self._prepare_request(
-            request
+        search_results = self._search(
+            query=query,
+            **kwargs,
         )
 
-        # =====================================================
-        # INPUT
-        # =====================================================
-
-        input_data = self._parse_input(
-            request
-        )
-
-        # =====================================================
-        # INTENT
-        # =====================================================
-
-        intent = detect_intent(
-            text=request.text,
-            input_type=input_data["type"],
-        )
-
-        # =====================================================
-        # PRODUCT IDENTITY
-        # =====================================================
-
-        product = identify_product(
-            text=request.text,
-            input_type=input_data["type"],
-        )
-
-        # =====================================================
-        # PRODUCT DNA
-        # =====================================================
-
-        product_dna = build_product_dna(
-            product=product,
-            user=request.user,
-        )
-
-        # =====================================================
-        # SEARCH PLAN
-        # =====================================================
-
-        search_plan = build_search_plan(
-            product_dna=product_dna,
-        )
-
-        # =====================================================
-        # GLOBAL SEARCH
-        # =====================================================
-
-        raw_offers = []
-
-        if search_plan.get(
-            "queries"
-        ):
-
-            raw_offers = (
-                self.search_engine.search(
-                    queries=search_plan[
-                        "queries"
-                    ],
-                    region=search_plan.get(
-                        "region",
-                        request.user.region,
-                    ),
-                    currency=search_plan.get(
-                        "currency",
-                        request.user.currency,
-                    ),
-                    budget=search_plan.get(
-                        "budget",
-                        {},
-                    ),
-                )
+        if not search_results:
+            return self._empty_result(
+                query=query,
+                reason="no_search_results",
             )
 
-        print(
-            "SAVVY DEBUG: "
-            f"raw offers = {len(raw_offers)}"
-        )
+        # -----------------------------------------------------
+        # 2. OFFER EXTRACTION
+        # -----------------------------------------------------
 
-        # =====================================================
-        # OFFER EXTRACTION
-        # =====================================================
+        extracted_offers = []
 
-        enriched_offers = []
-
-        for offer in raw_offers:
-
-            url = offer.get(
-                "url"
-            )
-
-            # -------------------------------------------------
-            # No URL
-            # -------------------------------------------------
-
-            if not url:
-
-                enriched_offers.append(
-                    offer
-                )
-
-                continue
-
-            # -------------------------------------------------
-            # Extract
-            # -------------------------------------------------
+        for result in search_results:
 
             try:
+                extracted = self.extractor.extract(
+                    result
+                )
+            except Exception:
+                continue
 
-                extracted = (
-                    self.offer_extractor.extract(
-                        url=url,
-                        fallback=offer,
-                    )
+            if extracted:
+                extracted_offers.append(
+                    extracted
                 )
 
-            except Exception as error:
-
-                print(
-                    "Offer extraction failed: "
-                    f"{url}: {error}"
-                )
-
-                extracted = {}
-
-            # -------------------------------------------------
-            # Existing fallback data
-            # -------------------------------------------------
-
-            fallback_product = (
-                offer.get(
-                    "product",
-                    {},
-                )
+        if not extracted_offers:
+            return self._empty_result(
+                query=query,
+                reason="no_extracted_offers",
             )
 
-            if not isinstance(
-                fallback_product,
-                dict,
-            ):
+        # -----------------------------------------------------
+        # 3. NORMALIZATION
+        # -----------------------------------------------------
 
-                fallback_product = {}
+        try:
+            normalized_offers = normalize_offers(
+                extracted_offers
+            )
+        except Exception:
+            normalized_offers = []
 
-            fallback_attributes = (
-                fallback_product.get(
-                    "attributes",
-                    {},
-                )
+        if not normalized_offers:
+            return self._empty_result(
+                query=query,
+                reason="no_normalized_offers",
             )
 
-            if not isinstance(
-                fallback_attributes,
-                dict,
-            ):
+        # -----------------------------------------------------
+        # 4. PRODUCT MATCHING
+        # -----------------------------------------------------
 
-                fallback_attributes = {}
-
-            extracted_attributes = (
-                extracted.get(
-                    "attributes",
-                    {},
-                )
+        try:
+            match_result = self.matcher.match(
+                normalized_offers,
+                query=query,
+            )
+        except TypeError:
+            # Поддержка matcher-контрактов,
+            # где query является первым аргументом.
+            match_result = self.matcher.match(
+                query,
+                normalized_offers,
             )
 
-            if not isinstance(
-                extracted_attributes,
-                dict,
-            ):
+        # -----------------------------------------------------
+        # 5. CONVERT MatchResult
+        # -----------------------------------------------------
 
-                extracted_attributes = {}
-
-            # -------------------------------------------------
-            # Merge attributes
-            # -------------------------------------------------
-
-            merged_attributes = {
-                **fallback_attributes,
-                **extracted_attributes,
-            }
-
-            # Explicit extractor fields
-            # have priority.
-            for attribute in (
-                "storage",
-                "color",
-                "size",
-                "material",
-                "gender",
-                "condition",
-                "quantity",
-                "capacity",
-                "voltage",
-                "compatibility",
-            ):
-
-                value = extracted.get(
-                    attribute
-                )
-
-                if value is not None:
-
-                    merged_attributes[
-                        attribute
-                    ] = value
-
-            # -------------------------------------------------
-            # Product fields
-            # -------------------------------------------------
-
-            product_title = (
-                extracted.get(
-                    "title"
-                )
-                or fallback_product.get(
-                    "title"
-                )
-                or offer.get(
-                    "title"
-                )
-            )
-
-            product_brand = (
-                extracted.get(
-                    "brand"
-                )
-                or fallback_product.get(
-                    "brand"
-                )
-                or offer.get(
-                    "brand"
-                )
-            )
-
-            product_model = (
-                extracted.get(
-                    "model"
-                )
-                or fallback_product.get(
-                    "model"
-                )
-                or offer.get(
-                    "model"
-                )
-            )
-
-            product_type = (
-                extracted.get(
-                    "product_type"
-                )
-                or fallback_product.get(
-                    "product_type"
-                )
-                or offer.get(
-                    "product_type"
-                )
-            )
-
-            product_category = (
-                extracted.get(
-                    "category"
-                )
-                or fallback_product.get(
-                    "category"
-                )
-                or offer.get(
-                    "category"
-                )
-            )
-
-            # -------------------------------------------------
-            # Ensure condition is preserved
-            # -------------------------------------------------
-
-            condition = (
-                extracted.get(
-                    "condition"
-                )
-                or offer.get(
-                    "condition"
-                )
-                or fallback_product.get(
-                    "condition"
-                )
-                or merged_attributes.get(
-                    "condition"
-                )
-                or "unknown"
-            )
-
-            merged_attributes[
-                "condition"
-            ] = condition
-
-            # -------------------------------------------------
-            # Build normalized product
-            # -------------------------------------------------
-
-            normalized_product = {
-
-                "title":
-                    product_title,
-
-                "brand":
-                    product_brand,
-
-                "model":
-                    product_model,
-
-                "category":
-                    product_category,
-
-                "product_type":
-                    product_type,
-
-                "attributes":
-                    merged_attributes,
-            }
-
-            # -------------------------------------------------
-            # Build enriched offer
-            # -------------------------------------------------
-
-            enriched_offer = {
-                **offer,
-
-                "product":
-                    normalized_product,
-
-                "title":
-                    product_title,
-
-                "brand":
-                    product_brand,
-
-                "model":
-                    product_model,
-
-                "category":
-                    product_category,
-
-                "product_type":
-                    product_type,
-
-                "attributes":
-                    merged_attributes,
-
-                "price":
-                    (
-                        extracted.get(
-                            "price"
-                        )
-                        if extracted.get(
-                            "price"
-                        ) is not None
-                        else offer.get(
-                            "price"
-                        )
-                    ),
-
-                "currency":
-                    (
-                        extracted.get(
-                            "currency"
-                        )
-                        or offer.get(
-                            "currency"
-                        )
-                    ),
-
-                "seller":
-                    (
-                        extracted.get(
-                            "seller"
-                        )
-                        or offer.get(
-                            "seller"
-                        )
-                    ),
-
-                "availability":
-                    (
-                        extracted.get(
-                            "availability"
-                        )
-                        or offer.get(
-                            "availability"
-                        )
-                    ),
-
-                "condition":
-                    condition,
-
-                "description":
-                    (
-                        extracted.get(
-                            "description"
-                        )
-                        or offer.get(
-                            "description"
-                        )
-                    ),
-
-                "image":
-                    (
-                        extracted.get(
-                            "image"
-                        )
-                        or offer.get(
-                            "image"
-                        )
-                    ),
-
-                "sku":
-                    (
-                        extracted.get(
-                            "sku"
-                        )
-                        or offer.get(
-                            "sku"
-                        )
-                    ),
-
-                "mpn":
-                    (
-                        extracted.get(
-                            "mpn"
-                        )
-                        or offer.get(
-                            "mpn"
-                        )
-                    ),
-
-                "gtin":
-                    (
-                        extracted.get(
-                            "gtin"
-                        )
-                        or offer.get(
-                            "gtin"
-                        )
-                    ),
-
-                "url":
-                    (
-                        extracted.get(
-                            "url"
-                        )
-                        or url
-                    ),
-
-                "extracted":
-                    extracted.get(
-                        "extracted",
-                        False,
-                    ),
-            }
-
-            enriched_offers.append(
-                enriched_offer
-            )
-
-        raw_offers = enriched_offers
-
-        # =====================================================
-        # MATCHING
-        # =====================================================
-
-        match_results = []
-
-        for offer in raw_offers:
-
-            match = (
-                self.product_matcher.match(
-                    product=product_dna,
-                    offer=offer,
-                )
-            )
-
-            match_results.append(
-                match
-            )
-
-            product_data = (
-                offer.get(
-                    "product",
-                    {},
-                )
-            )
-
-            if isinstance(
-                product_data,
-                dict,
-            ):
-
-                title = (
-                    product_data.get(
-                        "title",
-                        "",
-                    )
-                )
-
-            else:
-
-                title = (
-                    offer.get(
-                        "title",
-                        "",
-                    )
-                )
-
-            print(
-                "SAVVY MATCH: "
-                f"{title} | "
-                f"status="
-                f"{match.status.value} | "
-                f"score="
-                f"{match.score}"
-            )
-
-        # =====================================================
-        # REJECTED FILTER
-        # =====================================================
-
-        split_results = (
-            self.rejected_filter.split(
-                offers=raw_offers,
-                match_results=match_results,
-            )
+        matched_offers = self._extract_matched_offers(
+            match_result
         )
 
-        exact_offers = (
-            split_results.get(
+        if not matched_offers:
+            return self._empty_result(
+                query=query,
+                reason="no_matching_offers",
+                match_result=match_result,
+            )
+
+        # -----------------------------------------------------
+        # 6. DEAL ENGINE
+        # -----------------------------------------------------
+
+        deal_result = self.deal_engine.evaluate(
+            offers=matched_offers,
+            budget=budget,
+            budget_currency=budget_currency,
+            requested_condition=requested_condition,
+        )
+
+        # -----------------------------------------------------
+        # 7. FINAL RESULT
+        # -----------------------------------------------------
+
+        return {
+            "query": query,
+            "offers": matched_offers,
+            "match_result": self._serialize_match_result(
+                match_result
+            ),
+            "deal": deal_result,
+        }
+
+    # =========================================================
+    # SEARCH
+    # =========================================================
+
+    def _search(
+        self,
+        query: str,
+        **kwargs: Any,
+    ) -> list[Any]:
+
+        try:
+            result = self.search_engine.search(
+                query=query,
+                **kwargs,
+            )
+        except TypeError:
+            result = self.search_engine.search(
+                query,
+            )
+
+        if result is None:
+            return []
+
+        if isinstance(result, list):
+            return result
+
+        if isinstance(result, tuple):
+            return list(result)
+
+        return [result]
+
+    # =========================================================
+    # MATCH RESULT
+    # =========================================================
+
+    @staticmethod
+    def _extract_matched_offers(
+        match_result: Any,
+    ) -> list[dict[str, Any]]:
+        """
+        Извлекает offers из нового MatchResult.
+
+        Поддерживает:
+        - MatchResult с .offers
+        - MatchResult с .exact
+        - MatchResult с .similar
+        - dict-контракт для обратной совместимости
+        """
+
+        # -----------------------------------------------------
+        # Новый MatchResult
+        # -----------------------------------------------------
+
+        offers = getattr(
+            match_result,
+            "offers",
+            None,
+        )
+
+        if offers is not None:
+            return SavvyOrchestrator._as_offer_list(
+                offers
+            )
+
+        # -----------------------------------------------------
+        # MatchResult:
+        # exact + similar
+        # -----------------------------------------------------
+
+        exact = getattr(
+            match_result,
+            "exact",
+            None,
+        )
+
+        similar = getattr(
+            match_result,
+            "similar",
+            None,
+        )
+
+        if exact is not None or similar is not None:
+
+            return (
+                SavvyOrchestrator._as_offer_list(exact)
+                +
+                SavvyOrchestrator._as_offer_list(similar)
+            )
+
+        # -----------------------------------------------------
+        # Dictionary compatibility
+        # -----------------------------------------------------
+
+        if isinstance(match_result, dict):
+
+            offers = match_result.get(
+                "offers"
+            )
+
+            if offers is not None:
+                return SavvyOrchestrator._as_offer_list(
+                    offers
+                )
+
+            exact = match_result.get(
                 "exact",
                 [],
             )
-        )
 
-        similar_offers = (
-            split_results.get(
+            similar = match_result.get(
                 "similar",
                 [],
             )
-        )
 
-        rejected_offers = (
-            split_results.get(
-                "rejected",
-                [],
+            return (
+                SavvyOrchestrator._as_offer_list(
+                    exact
+                )
+                +
+                SavvyOrchestrator._as_offer_list(
+                    similar
+                )
             )
-        )
 
-        # -----------------------------------------------------
-        # Attach MatchResult to accepted/rejected offers
-        # -----------------------------------------------------
+        return []
 
-        matched_offers = []
+    # =========================================================
+    # OFFER CONVERSION
+    # =========================================================
 
-        rejected_with_match = []
+    @staticmethod
+    def _as_offer_list(
+        offers: Any,
+    ) -> list[dict[str, Any]]:
 
-        for index, offer in enumerate(
-            raw_offers
+        if offers is None:
+            return []
+
+        if isinstance(offers, dict):
+            return [dict(offers)]
+
+        if isinstance(offers, (list, tuple)):
+            result = []
+
+            for offer in offers:
+
+                if isinstance(offer, dict):
+                    result.append(
+                        dict(offer)
+                    )
+
+                elif hasattr(
+                    offer,
+                    "__dict__",
+                ):
+                    result.append(
+                        dict(vars(offer))
+                    )
+
+            return result
+
+        if hasattr(
+            offers,
+            "__dict__",
         ):
+            return [
+                dict(vars(offers))
+            ]
 
-            if index >= len(
-                match_results
+        return []
+
+    # =========================================================
+    # MATCH RESULT SERIALIZATION
+    # =========================================================
+
+    @staticmethod
+    def _serialize_match_result(
+        match_result: Any,
+    ) -> dict[str, Any]:
+
+        if match_result is None:
+            return {}
+
+        if isinstance(
+            match_result,
+            dict,
+        ):
+            return dict(match_result)
+
+        if hasattr(
+            match_result,
+            "__dict__",
+        ):
+            return dict(
+                vars(match_result)
+            )
+
+        result: dict[str, Any] = {}
+
+        for attribute in (
+            "exact_count",
+            "similar_count",
+            "rejected_count",
+            "matched_count",
+            "comparison_known",
+        ):
+            if hasattr(
+                match_result,
+                attribute,
             ):
-                continue
-
-            enriched_offer = {
-                **offer,
-                "match_result":
-                    match_results[index],
-            }
-
-            if match_results[
-                index
-            ].is_rejected:
-
-                rejected_with_match.append(
-                    enriched_offer
+                result[attribute] = getattr(
+                    match_result,
+                    attribute,
                 )
 
-            else:
+        return result
 
-                matched_offers.append(
-                    enriched_offer
-                )
+    # =========================================================
+    # EMPTY RESULT
+    # =========================================================
 
-        rejected_offers = (
-            rejected_with_match
-        )
+    @staticmethod
+    def _empty_result(
+        query: str,
+        reason: str,
+        match_result: Any = None,
+    ) -> dict[str, Any]:
 
-        exact_count = len(
-            exact_offers
-        )
-
-        similar_count = len(
-            similar_offers
-        )
-
-        print(
-            "SAVVY DEBUG: "
-            f"matched="
-            f"{len(matched_offers)}, "
-            f"rejected="
-            f"{len(rejected_offers)}, "
-            f"exact="
-            f"{exact_count}, "
-            f"similar="
-            f"{similar_count}"
-        )
-
-        # =====================================================
-        # NORMALIZATION
-        # =====================================================
-
-        offers = normalize_offers(
-            matched_offers
-        )
-
-        # =====================================================
-        # REAL COST
-        # =====================================================
-
-        offers = calculate_offers_real_cost(
-            offers=offers,
-            target_currency=(
-                request.user.currency
-            ),
-            converter=(
-                self.currency_converter
-            ),
-        )
-
-        # =====================================================
-        # DEAL ENGINE
-        # =====================================================
-
-        deal_analysis = (
-            self.deal_engine.analyze(
-                offers=offers,
-                product=product_dna,
-            )
-        )
-
-        classified_offers = (
-            deal_analysis.get(
-                "classified_offers",
-                [],
-            )
-        )
-
-        if classified_offers:
-
-            offers = (
-                classified_offers
-            )
-
-        # =====================================================
-        # RESPONSE
-        # =====================================================
-
-        return SavvyResponse(
-            success=True,
-
-            intent=intent,
-
-            data={
-
-                "region":
-                    request.user.region,
-
-                "currency":
-                    request.user.currency,
-
-                "input":
-                    input_data,
-
-                "product":
-                    product,
-
-                "product_dna":
-                    product_dna,
-
-                "search_plan":
-                    search_plan,
-
-                "raw_offers":
-                    raw_offers,
-
-                "matched_offers":
-                    matched_offers,
-
-                "rejected_offers":
-                    rejected_offers,
-
-                "offers":
-                    offers,
-
-                "deal_analysis":
-                    deal_analysis,
-
-                "matching": {
-
-                    "total_candidates":
-                        len(
-                            raw_offers
-                        ),
-
-                    "accepted":
-                        len(
-                            matched_offers
-                        ),
-
-                    "rejected":
-                        len(
-                            rejected_offers
-                        ),
-
-                    "exact":
-                        exact_count,
-
-                    "similar":
-                        similar_count,
-                },
+        result = {
+            "query": query,
+            "offers": [],
+            "match_result": {},
+            "deal": {
+                "deal_type": "no_deal",
+                "best_offer": None,
+                "comparison_known": False,
+                "comparison_source": None,
+                "reason": reason,
             },
-        )
-
-    # =========================================================
-    # REQUEST PREPARATION
-    # =========================================================
-
-    def _prepare_request(
-        self,
-        request: SavvyRequest,
-    ):
-
-        if request.user is None:
-
-            request.user = UserContext(
-                region=(
-                    self.config.default_region
-                ),
-                currency=(
-                    self.config.default_currency
-                ),
-            )
-
-    # =========================================================
-    # INPUT PARSER
-    # =========================================================
-
-    def _parse_input(
-        self,
-        request: SavvyRequest,
-    ) -> dict:
-
-        if request.url:
-
-            return parse_url(
-                request.url
-            )
-
-        if request.image is not None:
-
-            return parse_photo(
-                request.image
-            )
-
-        if request.text:
-
-            return parse_text(
-                request.text
-            )
-
-        return {
-            "type":
-                "unknown",
-
-            "value":
-                None,
-
-            "valid":
-                False,
         }
+
+        if match_result is not None:
+            result["match_result"] = (
+                SavvyOrchestrator._serialize_match_result(
+                    match_result
+                )
+            )
+
+        return result
