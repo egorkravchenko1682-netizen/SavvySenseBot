@@ -10,6 +10,7 @@ from .deal_quality import DealQuality
 from .deal_quality_confidence import DealQualityConfidence
 from .deal_quality_result import DealQualityResult
 from .offer_reliability import OfferReliability
+from .offer_risk import OfferRisk
 from .review_confidence import ReviewConfidence
 
 
@@ -22,10 +23,11 @@ class DealEngine:
         self.budget = DealBudget()
         self.condition = DealCondition()
         self.quality = DealQuality()
-        self.quality_result = DealQualityResult()
         self.quality_confidence = DealQualityConfidence()
+        self.quality_result = DealQualityResult()
         self.review_confidence = ReviewConfidence()
         self.reliability = OfferReliability()
+        self.risk = OfferRisk()
 
     def evaluate(
         self,
@@ -130,6 +132,24 @@ class DealEngine:
                 }
             )
 
+            risk = self.risk.calculate(
+                enriched_offer
+            )
+
+            enriched_offer.update(
+                {
+                    "offer_risk": risk[
+                        "offer_risk"
+                    ],
+                    "offer_risk_points": risk[
+                        "offer_risk_points"
+                    ],
+                    "offer_risk_known": risk[
+                        "offer_risk_known"
+                    ],
+                }
+            )
+
             enriched_offers.append(enriched_offer)
 
         exact = [
@@ -195,6 +215,9 @@ class DealEngine:
             "deal_quality_confidence": None,
             "deal_quality_confidence_score": None,
             "deal_quality_confidence_known": False,
+            "offer_risk": None,
+            "offer_risk_points": None,
+            "offer_risk_known": False,
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
             "within_budget_count": (
@@ -260,6 +283,17 @@ class DealEngine:
             ),
             "deal_quality_confidence_known": best_offer.get(
                 "deal_quality_confidence_known",
+                False,
+            ),
+
+            "offer_risk": best_offer.get(
+                "offer_risk"
+            ),
+            "offer_risk_points": best_offer.get(
+                "offer_risk_points"
+            ),
+            "offer_risk_known": best_offer.get(
+                "offer_risk_known",
                 False,
             ),
 
