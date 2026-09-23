@@ -1,15 +1,15 @@
-from .normalizer import (
-    normalize_offer,
-    normalize_offers,
+from .models import (
+    CanonicalOffer,
+    Money,
+    ProductData,
+    Seller,
+    Shipping,
 )
-
-from .extractor import (
-    OfferExtractor,
-)
-
 
 __all__ = [
-    "normalize_offer",
-    "normalize_offers",
-    "OfferExtractor",
+    "CanonicalOffer",
+    "Money",
+    "ProductData",
+    "Seller",
+    "Shipping",
 ]
