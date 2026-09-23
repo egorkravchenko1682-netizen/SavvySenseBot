@@ -8,6 +8,7 @@ from .deal_budget import DealBudget
 from .deal_condition import DealCondition
 from .deal_quality import DealQuality
 from .deal_quality_result import DealQualityResult
+from .offer_reliability import OfferReliability
 from .review_confidence import ReviewConfidence
 
 
@@ -22,6 +23,7 @@ class DealEngine:
         self.quality = DealQuality()
         self.quality_result = DealQualityResult()
         self.review_confidence = ReviewConfidence()
+        self.reliability = OfferReliability()
 
     def evaluate(
         self,
@@ -50,6 +52,10 @@ class DealEngine:
                 offer.get("review_count")
             )
 
+            reliability = self.reliability.calculate(
+                enriched_offer
+            )
+
             enriched_offer.update(
                 {
                     "review_confidence": confidence[
@@ -61,6 +67,16 @@ class DealEngine:
                     "review_confidence_known": confidence[
                         "review_confidence_known"
                     ],
+
+                    "offer_reliability": reliability[
+                        "offer_reliability"
+                    ],
+                    "offer_reliability_score": reliability[
+                        "offer_reliability_score"
+                    ],
+                    "offer_reliability_known": reliability[
+                        "offer_reliability_known"
+                    ],
                 }
             )
 
@@ -68,6 +84,7 @@ class DealEngine:
                 seller=enriched_offer,
                 reviews=enriched_offer,
                 review_confidence=confidence,
+                offer_reliability=reliability,
             )
 
             enriched_offer.update(
@@ -212,6 +229,17 @@ class DealEngine:
             ),
             "review_confidence_known": best_offer.get(
                 "review_confidence_known",
+                False,
+            ),
+
+            "offer_reliability": best_offer.get(
+                "offer_reliability"
+            ),
+            "offer_reliability_score": best_offer.get(
+                "offer_reliability_score"
+            ),
+            "offer_reliability_known": best_offer.get(
+                "offer_reliability_known",
                 False,
             ),
 
