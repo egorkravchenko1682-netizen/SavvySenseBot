@@ -14,10 +14,11 @@ from .offer_risk import OfferRisk
 from .review_confidence import ReviewConfidence
 from .risk_level import RiskLevel
 from .risk_filter import RiskFilter
+from .risk_decision import RiskDecision
 
 
 class DealEngine:
-    """Формирует сделку с учётом состояния, бюджета и качества."""
+    """Формирует сделку с учётом состояния, бюджета, качества и риска."""
 
     def __init__(self) -> None:
         self.candidates = DealCandidates()
@@ -32,6 +33,7 @@ class DealEngine:
         self.risk = OfferRisk()
         self.risk_level = RiskLevel()
         self.risk_filter = RiskFilter()
+        self.risk_decision = RiskDecision()
 
     def evaluate(
         self,
@@ -171,6 +173,21 @@ class DealEngine:
                 }
             )
 
+            risk_decision = self.risk_decision.decide(
+                enriched_offer
+            )
+
+            enriched_offer.update(
+                {
+                    "risk_decision": risk_decision[
+                        "risk_decision"
+                    ],
+                    "risk_decision_known": risk_decision[
+                        "risk_decision_known"
+                    ],
+                }
+            )
+
             enriched_offers.append(
                 enriched_offer
             )
@@ -250,6 +267,8 @@ class DealEngine:
             "risk_level": None,
             "risk_level_score": None,
             "risk_level_known": False,
+            "risk_decision": None,
+            "risk_decision_known": False,
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
             "within_budget_count": (
@@ -341,6 +360,14 @@ class DealEngine:
             ),
             "risk_level_known": best_offer.get(
                 "risk_level_known",
+                False,
+            ),
+
+            "risk_decision": best_offer.get(
+                "risk_decision"
+            ),
+            "risk_decision_known": best_offer.get(
+                "risk_decision_known",
                 False,
             ),
 
