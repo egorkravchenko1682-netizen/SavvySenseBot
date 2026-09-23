@@ -4,7 +4,7 @@ from typing import Any
 
 
 class RealCost:
-    """Рассчитывает полную подтверждённую стоимость предложения."""
+    """Рассчитывает полную подтверждённую стоимость."""
 
     def calculate(
         self,
@@ -14,10 +14,7 @@ class RealCost:
         price = offer.get("price")
         shipping = offer.get("shipping_cost")
 
-        if price is None:
-            return self._unknown()
-
-        if shipping is None:
+        if price is None or shipping is None:
             return self._unknown()
 
         currency = offer.get("currency")
@@ -30,15 +27,21 @@ class RealCost:
         duty = offer.get("duty")
         fee = offer.get("fee")
 
-        if tax is None or duty is None or fee is None:
+        if not offer.get("tax_known", False):
+            return self._unknown()
+
+        if not offer.get("duty_known", False):
+            return self._unknown()
+
+        if not offer.get("fee_known", False):
             return self._unknown()
 
         total = (
             float(price)
             + float(shipping)
-            + float(tax)
-            + float(duty)
-            + float(fee)
+            + float(tax or 0)
+            + float(duty or 0)
+            + float(fee or 0)
         )
 
         return {
