@@ -39,10 +39,9 @@ from cost.calculator import (
     calculate_offers_real_cost,
 )
 
-from deal import (
-    DealEngine,
-    ProductMatcher,
-)
+from deal import DealEngine
+
+from matching import ProductMatcher
 
 
 class SavvyCore:
@@ -329,39 +328,17 @@ class SavvyCore:
             print(
                 "SAVVY MATCH: "
                 f"{title} | "
-                f"type={match.get('match_type')} | "
-                f"score={match.get('match_score')} | "
-                f"reason={match.get('match_reason')}"
+                f"match_result={match}"
             )
 
             enriched_offer = {
                 **offer,
 
-                "match_type":
-                    match.get(
-                        "match_type"
-                    ),
-
-                "match_score":
-                    match.get(
-                        "match_score"
-                    ),
-
-                "match_reason":
-                    match.get(
-                        "match_reason"
-                    ),
-
-                "match_details":
+                "match_result":
                     match,
             }
 
-            if (
-                match.get(
-                    "match_type"
-                )
-                == "rejected"
-            ):
+            if match.is_rejected:
 
                 rejected_offers.append(
                     enriched_offer
@@ -469,10 +446,11 @@ class SavvyCore:
                             1
                             for offer
                             in matched_offers
-                            if offer.get(
-                                "match_type"
+                            if (
+                                offer.get(
+                                    "match_result"
+                                ).is_exact
                             )
-                            == "exact"
                         ),
 
                     "similar":
@@ -480,10 +458,11 @@ class SavvyCore:
                             1
                             for offer
                             in matched_offers
-                            if offer.get(
-                                "match_type"
-                            )
-                            == "similar"
+                            if (
+                                offer.get(
+                                    "match_result"
+                                ).is_similar
+                            ),
                         ),
                 },
             },
