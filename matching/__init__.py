@@ -7,8 +7,14 @@ from .result import (
     MatchStatus,
 )
 
+from .rejected_filter import (
+    RejectedFilter,
+)
+
+
 __all__ = [
     "ProductMatcher",
+    "RejectedFilter",
     "AttributeComparison",
     "AttributeStatus",
     "MatchResult",
