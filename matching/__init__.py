@@ -1,3 +1,5 @@
+from .matcher import ProductMatcher
+
 from .result import (
     AttributeComparison,
     AttributeStatus,
@@ -6,6 +8,7 @@ from .result import (
 )
 
 __all__ = [
+    "ProductMatcher",
     "AttributeComparison",
     "AttributeStatus",
     "MatchResult",
