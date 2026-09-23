@@ -11,6 +11,10 @@ from .normalizer import (
     normalize_offers,
 )
 
+from .extractor import (
+    OfferExtractor,
+)
+
 __all__ = [
     "CanonicalOffer",
     "Money",
@@ -19,4 +23,5 @@ __all__ = [
     "Shipping",
     "normalize_offer",
     "normalize_offers",
+    "OfferExtractor",
 ]
