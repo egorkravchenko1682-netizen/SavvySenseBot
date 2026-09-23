@@ -7,6 +7,7 @@ from .deal_quality_comparator import DealQualityComparator
 from .deal_budget import DealBudget
 from .deal_condition import DealCondition
 from .deal_quality import DealQuality
+from .deal_quality_confidence import DealQualityConfidence
 from .deal_quality_result import DealQualityResult
 from .offer_reliability import OfferReliability
 from .review_confidence import ReviewConfidence
@@ -22,6 +23,7 @@ class DealEngine:
         self.condition = DealCondition()
         self.quality = DealQuality()
         self.quality_result = DealQualityResult()
+        self.quality_confidence = DealQualityConfidence()
         self.review_confidence = ReviewConfidence()
         self.reliability = OfferReliability()
 
@@ -48,7 +50,7 @@ class DealEngine:
 
             enriched_offer = dict(offer)
 
-            confidence = self.review_confidence.calculate(
+            review_confidence = self.review_confidence.calculate(
                 offer.get("review_count")
             )
 
@@ -58,13 +60,13 @@ class DealEngine:
 
             enriched_offer.update(
                 {
-                    "review_confidence": confidence[
+                    "review_confidence": review_confidence[
                         "review_confidence"
                     ],
-                    "review_confidence_score": confidence[
+                    "review_confidence_score": review_confidence[
                         "review_confidence_score"
                     ],
-                    "review_confidence_known": confidence[
+                    "review_confidence_known": review_confidence[
                         "review_confidence_known"
                     ],
 
@@ -83,7 +85,7 @@ class DealEngine:
             quality = self.quality.calculate(
                 seller=enriched_offer,
                 reviews=enriched_offer,
-                review_confidence=confidence,
+                review_confidence=review_confidence,
                 offer_reliability=reliability,
             )
 
@@ -98,6 +100,32 @@ class DealEngine:
                     "deal_quality_known": quality.get(
                         "deal_quality_known",
                         False,
+                    ),
+                }
+            )
+
+            quality_confidence = (
+                self.quality_confidence.calculate(
+                    enriched_offer
+                )
+            )
+
+            enriched_offer.update(
+                {
+                    "deal_quality_confidence": (
+                        quality_confidence[
+                            "deal_quality_confidence"
+                        ]
+                    ),
+                    "deal_quality_confidence_score": (
+                        quality_confidence[
+                            "deal_quality_confidence_score"
+                        ]
+                    ),
+                    "deal_quality_confidence_known": (
+                        quality_confidence[
+                            "deal_quality_confidence_known"
+                        ]
                     ),
                 }
             )
@@ -164,6 +192,9 @@ class DealEngine:
             "deal_quality": None,
             "deal_quality_score": None,
             "deal_quality_known": False,
+            "deal_quality_confidence": None,
+            "deal_quality_confidence_score": None,
+            "deal_quality_confidence_known": False,
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
             "within_budget_count": (
@@ -220,6 +251,17 @@ class DealEngine:
             "deal_quality_known": quality[
                 "deal_quality_known"
             ],
+
+            "deal_quality_confidence": best_offer.get(
+                "deal_quality_confidence"
+            ),
+            "deal_quality_confidence_score": best_offer.get(
+                "deal_quality_confidence_score"
+            ),
+            "deal_quality_confidence_known": best_offer.get(
+                "deal_quality_confidence_known",
+                False,
+            ),
 
             "review_confidence": best_offer.get(
                 "review_confidence"
