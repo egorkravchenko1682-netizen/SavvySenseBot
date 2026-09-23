@@ -41,7 +41,10 @@ from cost.calculator import (
 
 from deal import DealEngine
 
-from matching import ProductMatcher
+from matching import (
+    ProductMatcher,
+    RejectedFilter,
+)
 
 
 class SavvyCore:
@@ -69,6 +72,8 @@ class SavvyCore:
         self.offer_extractor = OfferExtractor()
 
         self.product_matcher = ProductMatcher()
+
+        self.rejected_filter = RejectedFilter()
 
         self.currency_converter = CurrencyConverter()
 
@@ -555,13 +560,7 @@ class SavvyCore:
         # MATCHING
         # =====================================================
 
-        matched_offers = []
-
-        rejected_offers = []
-
-        exact_count = 0
-
-        similar_count = 0
+        match_results = []
 
         for offer in raw_offers:
 
@@ -570,6 +569,10 @@ class SavvyCore:
                     product=product_dna,
                     offer=offer,
                 )
+            )
+
+            match_results.append(
+                match
             )
 
             product_data = (
@@ -609,38 +612,86 @@ class SavvyCore:
                 f"{match.score}"
             )
 
+        # =====================================================
+        # REJECTED FILTER
+        # =====================================================
+
+        split_results = (
+            self.rejected_filter.split(
+                offers=raw_offers,
+                match_results=match_results,
+            )
+        )
+
+        exact_offers = (
+            split_results.get(
+                "exact",
+                [],
+            )
+        )
+
+        similar_offers = (
+            split_results.get(
+                "similar",
+                [],
+            )
+        )
+
+        rejected_offers = (
+            split_results.get(
+                "rejected",
+                [],
+            )
+        )
+
+        # -----------------------------------------------------
+        # Attach MatchResult to accepted/rejected offers
+        # -----------------------------------------------------
+
+        matched_offers = []
+
+        rejected_with_match = []
+
+        for index, offer in enumerate(
+            raw_offers
+        ):
+
+            if index >= len(
+                match_results
+            ):
+                continue
+
             enriched_offer = {
                 **offer,
-                "match_result": match,
+                "match_result":
+                    match_results[index],
             }
 
-            # -------------------------------------------------
-            # REJECTED
-            # -------------------------------------------------
+            if match_results[
+                index
+            ].is_rejected:
 
-            if match.is_rejected:
-
-                rejected_offers.append(
+                rejected_with_match.append(
                     enriched_offer
                 )
 
-                continue
+            else:
 
-            # -------------------------------------------------
-            # ACCEPTED
-            # -------------------------------------------------
+                matched_offers.append(
+                    enriched_offer
+                )
 
-            matched_offers.append(
-                enriched_offer
-            )
+        rejected_offers = (
+            rejected_with_match
+        )
 
-            if match.is_exact:
+        exact_count = len(
+            exact_offers
+        )
 
-                exact_count += 1
-
-            elif match.is_similar:
-
-                similar_count += 1
+        similar_count = len(
+            similar_offers
+        )
 
         print(
             "SAVVY DEBUG: "
