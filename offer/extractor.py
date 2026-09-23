@@ -32,14 +32,21 @@ class OfferExtractor:
         PriceExtractor
         ConditionExtractor
         AvailabilityExtractor
+        Cost extraction
           ↓
         единый OfferExtractor result
 
-    Публичный контракт сохраняется:
+    Публичный контракт:
 
         extract(url, fallback) -> dict
 
-    Поэтому существующий orchestrator менять не требуется.
+    Важный принцип:
+
+        UNKNOWN != 0
+
+    Если стоимость доставки, налогов,
+    пошлин или комиссий не найдена,
+    она остаётся None.
     """
 
     name = "offer_extractor"
@@ -229,12 +236,16 @@ class OfferExtractor:
             )
 
             # =================================================
-            # ATTRIBUTES
+            # PAGE TEXT
             # =================================================
 
             page_text = self._page_text(
                 soup
             )
+
+            # =================================================
+            # ATTRIBUTES
+            # =================================================
 
             attributes = (
                 self.attribute_extractor.extract(
@@ -289,6 +300,7 @@ class OfferExtractor:
             )
 
             if price is None:
+
                 meta_price = (
                     self._extract_meta_price(
                         soup
@@ -299,6 +311,7 @@ class OfferExtractor:
                     price = meta_price
 
             if price is None:
+
                 price = (
                     self._clean_numeric_price(
                         fallback.get(
@@ -326,6 +339,7 @@ class OfferExtractor:
             )
 
             if currency:
+
                 currency = str(
                     currency
                 ).upper()
@@ -337,8 +351,10 @@ class OfferExtractor:
             condition = (
                 self.condition_extractor.extract(
                     data={
-                        "product": product_data,
-                        "offer": offer_data,
+                        "product":
+                            product_data,
+                        "offer":
+                            offer_data,
                     },
                     text=(
                         f"{title or ''} "
@@ -354,6 +370,7 @@ class OfferExtractor:
                     "condition"
                 )
             ):
+
                 condition = self._clean(
                     fallback.get(
                         "condition"
@@ -371,8 +388,10 @@ class OfferExtractor:
             availability = (
                 self.availability_extractor.extract(
                     data={
-                        "product": product_data,
-                        "offer": offer_data,
+                        "product":
+                            product_data,
+                        "offer":
+                            offer_data,
                     },
                     text=(
                         f"{title or ''} "
@@ -388,11 +407,25 @@ class OfferExtractor:
                     "availability"
                 )
             ):
+
                 availability = self._clean(
                     fallback.get(
                         "availability"
                     )
                 )
+
+            # =================================================
+            # COST COMPONENTS
+            # =================================================
+
+            cost_data = (
+                self._extract_costs(
+                    offer=offer_data,
+                    product=product_data,
+                    soup=soup,
+                    fallback=fallback,
+                )
+            )
 
             # =================================================
             # SELLER
@@ -458,12 +491,14 @@ class OfferExtractor:
             )
 
             if not image:
+
                 image = self._meta(
                     soup,
                     "og:image",
                 )
 
             if not image:
+
                 image = self._clean(
                     fallback.get(
                         "image"
@@ -494,28 +529,67 @@ class OfferExtractor:
                 "storage": attributes.get(
                     "storage"
                 ),
+
                 "color": attributes.get(
                     "color"
                 ),
+
                 "size": attributes.get(
                     "size"
                 ),
+
                 "material": attributes.get(
                     "material"
                 ),
+
                 "gender": attributes.get(
                     "gender"
                 ),
+
                 "condition": condition,
 
                 "price": price,
                 "currency": currency,
 
+                # -------------------------------------------------
+                # REAL COST COMPONENTS
+                # -------------------------------------------------
+
+                "delivery":
+                    cost_data["delivery"],
+
+                "taxes":
+                    cost_data["taxes"],
+
+                "duties":
+                    cost_data["duties"],
+
+                "fees":
+                    cost_data["fees"],
+
+                "delivery_known":
+                    cost_data["delivery_known"],
+
+                "taxes_known":
+                    cost_data["taxes_known"],
+
+                "duties_known":
+                    cost_data["duties_known"],
+
+                "fees_known":
+                    cost_data["fees_known"],
+
+                "cost_source":
+                    cost_data["source"],
+
                 "description": description,
+
                 "image": image,
 
                 "seller": seller,
-                "availability": availability,
+
+                "availability":
+                    availability,
 
                 "sku": sku,
                 "mpn": mpn,
@@ -554,13 +628,16 @@ class OfferExtractor:
                 "(KHTML, like Gecko) "
                 "Chrome/126.0 Safari/537.36"
             ),
+
             "Accept-Language":
                 "en-US,en;q=0.9",
+
             "Accept":
                 "text/html,"
                 "application/xhtml+xml,"
                 "application/xml;q=0.9,"
                 "*/*;q=0.8",
+
             "Cache-Control":
                 "no-cache",
         }
@@ -629,6 +706,7 @@ class OfferExtractor:
                     for value in types
                 )
             ):
+
                 return item
 
             graph = item.get(
@@ -727,6 +805,7 @@ class OfferExtractor:
             offers,
             dict,
         ):
+
             return offers
 
         if isinstance(
@@ -750,6 +829,7 @@ class OfferExtractor:
                         "lowPrice"
                     ) is not None
                 ):
+
                     return offer
 
             for offer in offers:
@@ -758,9 +838,501 @@ class OfferExtractor:
                     offer,
                     dict,
                 ):
+
                     return offer
 
         return {}
+
+    # =========================================================
+    # COST EXTRACTION
+    # =========================================================
+
+    def _extract_costs(
+        self,
+        offer: dict[str, Any],
+        product: dict[str, Any],
+        soup: BeautifulSoup,
+        fallback: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Извлекает компоненты реальной стоимости.
+
+        Источники в порядке доверия:
+
+        1. Structured Offer
+        2. Structured Product
+        3. Meta / HTML
+        4. fallback
+
+        Никакие неизвестные значения
+        не превращаются в 0.
+        """
+
+        delivery = None
+        taxes = None
+        duties = None
+        fees = None
+
+        delivery_source = None
+        taxes_source = None
+        duties_source = None
+        fees_source = None
+
+        # -----------------------------------------------------
+        # DELIVERY
+        # -----------------------------------------------------
+
+        delivery = self._extract_delivery(
+            offer=offer,
+            product=product,
+        )
+
+        if delivery is not None:
+            delivery_source = "structured"
+
+        if delivery is None:
+
+            delivery = (
+                self._extract_meta_cost(
+                    soup,
+                    (
+                        "shipping:amount",
+                        "shipping_amount",
+                        "delivery:amount",
+                        "delivery_amount",
+                    ),
+                )
+            )
+
+            if delivery is not None:
+                delivery_source = "meta"
+
+        if delivery is None:
+
+            delivery = self._clean_numeric_price(
+                fallback.get(
+                    "delivery"
+                )
+            )
+
+            if delivery is not None:
+                delivery_source = "fallback"
+
+        # -----------------------------------------------------
+        # TAXES
+        # -----------------------------------------------------
+
+        taxes = self._extract_numeric_field(
+            offer,
+            (
+                "tax",
+                "taxes",
+                "taxAmount",
+                "vat",
+                "vatAmount",
+            ),
+        )
+
+        if taxes is not None:
+            taxes_source = "structured"
+
+        if taxes is None:
+
+            taxes = self._extract_numeric_field(
+                product,
+                (
+                    "tax",
+                    "taxes",
+                    "taxAmount",
+                    "vat",
+                    "vatAmount",
+                ),
+            )
+
+            if taxes is not None:
+                taxes_source = "structured"
+
+        if taxes is None:
+
+            taxes = self._clean_numeric_price(
+                fallback.get(
+                    "taxes"
+                )
+            )
+
+            if taxes is not None:
+                taxes_source = "fallback"
+
+        # -----------------------------------------------------
+        # DUTIES
+        # -----------------------------------------------------
+
+        duties = self._extract_numeric_field(
+            offer,
+            (
+                "duty",
+                "duties",
+                "customsDuty",
+                "importDuty",
+                "customs",
+            ),
+        )
+
+        if duties is not None:
+            duties_source = "structured"
+
+        if duties is None:
+
+            duties = self._extract_numeric_field(
+                product,
+                (
+                    "duty",
+                    "duties",
+                    "customsDuty",
+                    "importDuty",
+                    "customs",
+                ),
+            )
+
+            if duties is not None:
+                duties_source = "structured"
+
+        if duties is None:
+
+            duties = self._clean_numeric_price(
+                fallback.get(
+                    "duties"
+                )
+            )
+
+            if duties is not None:
+                duties_source = "fallback"
+
+        # -----------------------------------------------------
+        # FEES
+        # -----------------------------------------------------
+
+        fees = self._extract_numeric_field(
+            offer,
+            (
+                "fee",
+                "fees",
+                "serviceFee",
+                "serviceFees",
+                "commission",
+                "commissions",
+            ),
+        )
+
+        if fees is not None:
+            fees_source = "structured"
+
+        if fees is None:
+
+            fees = self._extract_numeric_field(
+                product,
+                (
+                    "fee",
+                    "fees",
+                    "serviceFee",
+                    "serviceFees",
+                    "commission",
+                    "commissions",
+                ),
+            )
+
+            if fees is not None:
+                fees_source = "structured"
+
+        if fees is None:
+
+            fees = self._clean_numeric_price(
+                fallback.get(
+                    "fees"
+                )
+            )
+
+            if fees is not None:
+                fees_source = "fallback"
+
+        return {
+            "delivery": delivery,
+            "taxes": taxes,
+            "duties": duties,
+            "fees": fees,
+
+            "delivery_known":
+                delivery is not None,
+
+            "taxes_known":
+                taxes is not None,
+
+            "duties_known":
+                duties is not None,
+
+            "fees_known":
+                fees is not None,
+
+            "source": {
+                "delivery":
+                    delivery_source,
+
+                "taxes":
+                    taxes_source,
+
+                "duties":
+                    duties_source,
+
+                "fees":
+                    fees_source,
+            },
+        }
+
+    def _extract_delivery(
+        self,
+        offer: dict[str, Any],
+        product: dict[str, Any],
+    ) -> float | None:
+        """
+        Извлекает стоимость доставки
+        из Schema.org / JSON-LD.
+
+        Поддерживает распространённые варианты:
+
+            shippingDetails
+            shippingRate
+            shipping
+            delivery
+        """
+
+        candidates = [
+            offer.get(
+                "shippingDetails"
+            ),
+            offer.get(
+                "shipping"
+            ),
+            offer.get(
+                "delivery"
+            ),
+            product.get(
+                "shippingDetails"
+            ),
+            product.get(
+                "shipping"
+            ),
+            product.get(
+                "delivery"
+            ),
+        ]
+
+        for candidate in candidates:
+
+            value = (
+                self._extract_shipping_value(
+                    candidate
+                )
+            )
+
+            if value is not None:
+                return value
+
+        return None
+
+    def _extract_shipping_value(
+        self,
+        value: Any,
+    ) -> float | None:
+
+        if value is None:
+            return None
+
+        if isinstance(
+            value,
+            (
+                int,
+                float,
+            ),
+        ):
+
+            return float(value)
+
+        if isinstance(
+            value,
+            str,
+        ):
+
+            return self._clean_numeric_price(
+                value
+            )
+
+        if isinstance(
+            value,
+            list,
+        ):
+
+            for item in value:
+
+                result = (
+                    self._extract_shipping_value(
+                        item
+                    )
+                )
+
+                if result is not None:
+                    return result
+
+            return None
+
+        if isinstance(
+            value,
+            dict,
+        ):
+
+            # Schema.org:
+            #
+            # shippingDetails:
+            # {
+            #   shippingRate: {
+            #       value: 10
+            #   }
+            # }
+
+            for key in (
+                "shippingRate",
+                "price",
+                "value",
+                "amount",
+                "cost",
+            ):
+
+                nested = value.get(
+                    key
+                )
+
+                if nested is None:
+                    continue
+
+                result = (
+                    self._extract_shipping_value(
+                        nested
+                    )
+                )
+
+                if result is not None:
+                    return result
+
+            # Некоторые сайты используют
+            # priceSpecification.
+
+            specification = value.get(
+                "priceSpecification"
+            )
+
+            if specification is not None:
+
+                result = (
+                    self._extract_shipping_value(
+                        specification
+                    )
+                )
+
+                if result is not None:
+                    return result
+
+        return None
+
+    @staticmethod
+    def _extract_numeric_field(
+        data: dict[str, Any],
+        keys: tuple[str, ...],
+    ) -> float | None:
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+            return None
+
+        for key in keys:
+
+            value = data.get(
+                key
+            )
+
+            if value is None:
+                continue
+
+            if isinstance(
+                value,
+                dict,
+            ):
+
+                for nested_key in (
+                    "value",
+                    "amount",
+                    "price",
+                ):
+
+                    nested = value.get(
+                        nested_key
+                    )
+
+                    if nested is not None:
+
+                        result = (
+                            OfferExtractor
+                            ._clean_numeric_price(
+                                nested
+                            )
+                        )
+
+                        if result is not None:
+                            return result
+
+                continue
+
+            result = (
+                OfferExtractor
+                ._clean_numeric_price(
+                    value
+                )
+            )
+
+            if result is not None:
+                return result
+
+        return None
+
+    @staticmethod
+    def _extract_meta_cost(
+        soup: BeautifulSoup,
+        candidates: tuple[str, ...],
+    ) -> float | None:
+
+        for candidate in candidates:
+
+            value = (
+                OfferExtractor._meta(
+                    soup,
+                    candidate,
+                )
+            )
+
+            if value is None:
+                continue
+
+            result = (
+                OfferExtractor
+                ._clean_numeric_price(
+                    value
+                )
+            )
+
+            if result is not None:
+                return result
+
+        return None
 
     # =========================================================
     # PRICE FALLBACK
@@ -843,6 +1415,7 @@ class OfferExtractor:
                 float,
             ),
         ):
+
             return float(
                 value
             )
@@ -979,6 +1552,7 @@ class OfferExtractor:
         if domain.startswith(
             "www."
         ):
+
             domain = domain[4:]
 
         return domain or None
@@ -1096,6 +1670,7 @@ class OfferExtractor:
             )
 
             if value:
+
                 return (
                     str(value)
                     .strip()
@@ -1121,6 +1696,7 @@ class OfferExtractor:
             )
 
             if value:
+
                 return (
                     str(value)
                     .strip()
@@ -1145,6 +1721,7 @@ class OfferExtractor:
                 "noscript",
             ]
         ):
+
             element.decompose()
 
         text = soup.get_text(
@@ -1209,6 +1786,7 @@ class OfferExtractor:
             attributes,
             dict,
         ):
+
             attributes = {}
 
         condition = (
@@ -1219,6 +1797,42 @@ class OfferExtractor:
                 "condition"
             )
             or "unknown"
+        )
+
+        delivery = (
+            OfferExtractor
+            ._clean_numeric_price(
+                fallback.get(
+                    "delivery"
+                )
+            )
+        )
+
+        taxes = (
+            OfferExtractor
+            ._clean_numeric_price(
+                fallback.get(
+                    "taxes"
+                )
+            )
+        )
+
+        duties = (
+            OfferExtractor
+            ._clean_numeric_price(
+                fallback.get(
+                    "duties"
+                )
+            )
+        )
+
+        fees = (
+            OfferExtractor
+            ._clean_numeric_price(
+                fallback.get(
+                    "fees"
+                )
+            )
         )
 
         return {
@@ -1302,6 +1916,52 @@ class OfferExtractor:
                 fallback.get(
                     "currency"
                 ),
+
+            "delivery":
+                delivery,
+
+            "taxes":
+                taxes,
+
+            "duties":
+                duties,
+
+            "fees":
+                fees,
+
+            "delivery_known":
+                delivery is not None,
+
+            "taxes_known":
+                taxes is not None,
+
+            "duties_known":
+                duties is not None,
+
+            "fees_known":
+                fees is not None,
+
+            "cost_source": {
+                "delivery":
+                    "fallback"
+                    if delivery is not None
+                    else None,
+
+                "taxes":
+                    "fallback"
+                    if taxes is not None
+                    else None,
+
+                "duties":
+                    "fallback"
+                    if duties is not None
+                    else None,
+
+                "fees":
+                    "fallback"
+                    if fees is not None
+                    else None,
+            },
 
             "description":
                 fallback.get(
