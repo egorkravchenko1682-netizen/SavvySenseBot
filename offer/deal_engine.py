@@ -3,17 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 from .deal_candidates import DealCandidates
-from .deal_comparator import DealComparator
+from .deal_quality_comparator import DealQualityComparator
 from .deal_budget import DealBudget
 from .deal_condition import DealCondition
 
 
 class DealEngine:
-    """Формирует сделку с учётом состояния и бюджета."""
+    """Формирует сделку с учётом состояния, бюджета и качества."""
 
     def __init__(self) -> None:
         self.candidates = DealCandidates()
-        self.comparator = DealComparator()
+        self.comparator = DealQualityComparator()
         self.budget = DealBudget()
         self.condition = DealCondition()
 
@@ -58,7 +58,7 @@ class DealEngine:
             budget_currency,
         )
 
-        exact_result = self.comparator.find_cheapest(
+        exact_result = self.comparator.find_best(
             exact_budget["within_budget"]
         )
 
@@ -72,7 +72,7 @@ class DealEngine:
                 similar_budget=similar_budget,
             )
 
-        similar_result = self.comparator.find_cheapest(
+        similar_result = self.comparator.find_best(
             similar_budget["within_budget"]
         )
 
@@ -124,7 +124,7 @@ class DealEngine:
 
         return {
             "deal_type": deal_type,
-            "best_offer": result["cheapest"],
+            "best_offer": result["best_offer"],
             "comparison_known": True,
             "comparison_source": result["comparison_source"],
 
