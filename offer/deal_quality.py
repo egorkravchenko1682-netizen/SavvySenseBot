@@ -4,17 +4,23 @@ from typing import Any
 
 
 class DealQuality:
-    """Формирует качество предложения по продавцу и отзывам."""
+    """Формирует качество предложения по продавцу, отзывам и надёжности."""
 
     def calculate(
         self,
         seller: dict[str, Any],
         reviews: dict[str, Any],
         review_confidence: dict[str, Any] | None = None,
+        offer_reliability: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
 
-        seller_score = seller.get("seller_quality_score")
-        review_score = reviews.get("review_quality_score")
+        seller_score = seller.get(
+            "seller_quality_score"
+        )
+
+        review_score = reviews.get(
+            "review_quality_score"
+        )
 
         confidence_score = None
 
@@ -23,12 +29,20 @@ class DealQuality:
                 "review_confidence_score"
             )
 
+        reliability_score = None
+
+        if offer_reliability:
+            reliability_score = offer_reliability.get(
+                "offer_reliability_score"
+            )
+
         scores = [
             score
             for score in (
                 seller_score,
                 review_score,
                 confidence_score,
+                reliability_score,
             )
             if score is not None
         ]
@@ -44,8 +58,10 @@ class DealQuality:
 
         if score >= 0.8:
             quality = "high"
+
         elif score >= 0.5:
             quality = "medium"
+
         else:
             quality = "low"
 
