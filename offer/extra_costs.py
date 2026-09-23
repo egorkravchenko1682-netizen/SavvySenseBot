@@ -4,7 +4,7 @@ from typing import Any
 
 
 class ExtraCosts:
-    """Хранит дополнительные расходы предложения."""
+    """Хранит дополнительные расходы и их подтверждение."""
 
     def build(
         self,
@@ -12,17 +12,22 @@ class ExtraCosts:
         duty: float | None = None,
         fee: float | None = None,
         currency: str | None = None,
+        tax_known: bool = False,
+        duty_known: bool = False,
+        fee_known: bool = False,
     ) -> dict[str, Any]:
-
-        known = all(
-            value is not None
-            for value in (tax, duty, fee)
-        )
 
         return {
             "tax": tax,
             "duty": duty,
             "fee": fee,
             "currency": currency,
-            "extra_costs_known": known,
+            "tax_known": tax_known,
+            "duty_known": duty_known,
+            "fee_known": fee_known,
+            "extra_costs_known": (
+                tax_known
+                and duty_known
+                and fee_known
+            ),
         }
