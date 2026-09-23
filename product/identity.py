@@ -62,40 +62,34 @@ def identify_product(
 
         "model": model,
 
-        "product_type":
-            product_type,
+        "product_type": product_type,
 
         "attributes": {
             key: value
-            for key, value
-            in attributes.items()
+            for key, value in attributes.items()
             if key != "keywords"
             and value is not None
         },
 
-        "keywords":
-            attributes.get(
-                "keywords",
-                [],
-            ),
+        "keywords": attributes.get(
+            "keywords",
+            [],
+        ),
 
         "budget": budget,
 
         "currency": currency,
 
-        "condition":
-            attributes.get(
-                "condition"
-            ),
+        "condition": attributes.get(
+            "condition"
+        ),
 
-        "input_type":
-            input_type,
+        "input_type": input_type,
 
-        "exact_product":
-            bool(
-                model
-                or name
-            ),
+        "exact_product": bool(
+            model
+            or name
+        ),
     }
 
 
@@ -106,10 +100,6 @@ def _extract_product_name(
     """
     Формирует название товара без служебных частей
     запроса и бюджета.
-
-    Это не должно быть слишком агрессивным:
-    Product DNA и AttributeExtractor получают
-    отдельные структурированные атрибуты.
     """
 
     if not text:
@@ -127,7 +117,7 @@ def _extract_product_name(
         flags=re.IGNORECASE,
     )
 
-    # Убираем бюджетные ограничения.
+    # Убираем бюджетные ограничения с символом валюты.
     cleaned = re.sub(
         r"\s+(?:до|менее|max|максимум|"
         r"не дороже|за)\s+"
@@ -137,6 +127,7 @@ def _extract_product_name(
         flags=re.IGNORECASE,
     )
 
+    # Убираем бюджетные ограничения с названием валюты.
     cleaned = re.sub(
         r"\s+(?:до|менее|max|максимум|"
         r"не дороже|за)\s+"
@@ -164,10 +155,28 @@ def _extract_product_name(
 def _extract_brand_from_name(
     name: str | None,
 ) -> str | None:
+    """
+    Определяет бренд по названию товара.
+
+    Используются два уровня:
+
+    1. Явное название бренда:
+       "Apple iPhone 15 Pro"
+
+    2. Устойчивый маркер бренда:
+       "iPhone 15 Pro" -> Apple
+       "Galaxy S24" -> Samsung
+       "Pixel 9" -> Google
+
+    Неизвестный бренд не угадывается.
+    """
 
     if not name:
         return None
 
+    normalized = name.lower().strip()
+
+    # Явные названия брендов.
     known_brands = {
         "apple",
         "samsung",
@@ -184,6 +193,7 @@ def _extract_brand_from_name(
         "hp",
         "dell",
         "msi",
+        "microsoft",
         "nike",
         "adidas",
         "puma",
@@ -210,15 +220,69 @@ def _extract_brand_from_name(
         "ecovacs",
     }
 
-    normalized = name.lower()
-
     for brand in known_brands:
-
         if re.search(
             rf"\b{re.escape(brand)}\b",
             normalized,
         ):
             return brand
+
+    # Семантические маркеры брендов.
+    #
+    # Например:
+    # iPhone -> Apple
+    # Galaxy -> Samsung
+    # Pixel -> Google
+    brand_markers = {
+        "apple": {
+            "iphone",
+            "ipad",
+            "macbook",
+            "imac",
+            "airpods",
+            "apple watch",
+        },
+        "samsung": {
+            "galaxy",
+            "galaxy s",
+            "galaxy a",
+            "galaxy z",
+            "galaxy note",
+        },
+        "google": {
+            "pixel",
+            "pixel pro",
+            "pixel fold",
+        },
+        "xiaomi": {
+            "redmi",
+            "poco",
+            "mi phone",
+        },
+        "sony": {
+            "playstation",
+            "xperia",
+        },
+        "microsoft": {
+            "surface",
+            "xbox",
+        },
+        "dyson": {
+            "supersonic",
+            "airwrap",
+            "v15 detect",
+        },
+    }
+
+    for brand, markers in brand_markers.items():
+
+        for marker in markers:
+
+            if re.search(
+                rf"\b{re.escape(marker)}\b",
+                normalized,
+            ):
+                return brand
 
     return None
 
@@ -226,6 +290,10 @@ def _extract_brand_from_name(
 def _extract_budget(
     text: str,
 ) -> tuple[float | None, str | None]:
+    """
+    Извлекает бюджет только тогда,
+    когда число явно используется как ограничение.
+    """
 
     if not text:
         return None, None
@@ -248,23 +316,28 @@ def _extract_budget(
             "RUB",
         ),
         (
-            r"\b(\d+(?:[.,]\d+)?)\s*(?:usd|доллар(?:ов|а)?)\b",
+            r"\b(\d+(?:[.,]\d+)?)\s*"
+            r"(?:usd|доллар(?:ов|а)?)\b",
             "USD",
         ),
         (
-            r"\b(\d+(?:[.,]\d+)?)\s*(?:eur|евро)\b",
+            r"\b(\d+(?:[.,]\d+)?)\s*"
+            r"(?:eur|евро)\b",
             "EUR",
         ),
         (
-            r"\b(\d+(?:[.,]\d+)?)\s*(?:gbp|фунтов?)\b",
+            r"\b(\d+(?:[.,]\d+)?)\s*"
+            r"(?:gbp|фунтов?)\b",
             "GBP",
         ),
         (
-            r"\b(\d+(?:[.,]\d+)?)\s*(?:rub|руб(?:лей|ля)?)\b",
+            r"\b(\d+(?:[.,]\d+)?)\s*"
+            r"(?:rub|руб(?:лей|ля)?)\b",
             "RUB",
         ),
         (
-            r"\b(\d+(?:[.,]\d+)?)\s*(?:byn|белорусских\s+рублей)\b",
+            r"\b(\d+(?:[.,]\d+)?)\s*"
+            r"(?:byn|белорусских\s+рублей)\b",
             "BYN",
         ),
     ]
@@ -281,17 +354,17 @@ def _extract_budget(
             continue
 
         try:
-
             value = float(
-                match.group(1)
-                .replace(",", ".")
+                match.group(1).replace(
+                    ",",
+                    ".",
+                )
             )
 
         except (
             TypeError,
             ValueError,
         ):
-
             continue
 
         # Считаем число бюджетом только если
