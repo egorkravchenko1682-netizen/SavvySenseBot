@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -8,18 +9,43 @@ from bs4 import BeautifulSoup
 
 class OfferExtractor:
     """
-    Универсальный extractor товарных страниц.
+    Универсальный extractor товарных страниц SAVVY SENSE.
 
     Извлекает:
-    - название;
-    - бренд;
-    - цену;
-    - валюту;
-    - описание;
-    - изображение;
-    - продавца;
-    - наличие;
-    - конечный URL.
+
+    Identity:
+    - title
+    - brand
+    - model
+    - product_type
+    - category
+
+    Attributes:
+    - storage
+    - color
+    - size
+    - material
+    - gender
+    - condition
+    - quantity
+    - capacity
+    - voltage
+    - compatibility
+
+    Commerce:
+    - price
+    - currency
+    - seller
+    - availability
+
+    Additional:
+    - description
+    - image
+    - sku
+    - mpn
+    - gtin
+    - url
+    - domain
     """
 
     name = "offer_extractor"
@@ -29,6 +55,10 @@ class OfferExtractor:
         timeout: int = 15,
     ):
         self.timeout = timeout
+
+    # =========================================================
+    # PUBLIC API
+    # =========================================================
 
     def extract(
         self,
@@ -44,6 +74,7 @@ class OfferExtractor:
             )
 
         try:
+
             response = requests.get(
                 url,
                 headers=self._headers(),
@@ -72,6 +103,10 @@ class OfferExtractor:
                 product_data
             )
 
+            # =================================================
+            # BASIC IDENTITY
+            # =================================================
+
             title = (
                 self._clean(
                     product_data.get("name")
@@ -80,8 +115,36 @@ class OfferExtractor:
                     soup,
                     "og:title",
                 )
+                or self._meta(
+                    soup,
+                    "twitter:title",
+                )
                 or self._clean(
                     fallback.get("title")
+                )
+            )
+
+            brand = (
+                self._extract_brand(
+                    product_data
+                )
+                or self._clean(
+                    fallback.get("brand")
+                )
+                or self._infer_brand(
+                    title
+                )
+            )
+
+            model = (
+                self._extract_model(
+                    product_data
+                )
+                or self._clean(
+                    fallback.get("model")
+                )
+                or self._infer_model(
+                    title
                 )
             )
 
@@ -96,17 +159,63 @@ class OfferExtractor:
                     "og:description",
                 )
                 or self._clean(
-                    fallback.get("description")
+                    fallback.get(
+                        "description"
+                    )
                 )
             )
 
-            brand = self._extract_brand(
-                product_data
+            # =================================================
+            # PRODUCT TYPE / CATEGORY
+            # =================================================
+
+            product_type = (
+                self._extract_product_type(
+                    product_data
+                )
+                or self._clean(
+                    fallback.get(
+                        "product_type"
+                    )
+                )
             )
 
-            price = self._extract_price(
-                offer_data
+            category = (
+                self._extract_category(
+                    product_data
+                )
+                or self._clean(
+                    fallback.get(
+                        "category"
+                    )
+                )
             )
+
+            # =================================================
+            # PRICE
+            # =================================================
+
+            price = (
+                self._extract_price(
+                    offer_data
+                )
+            )
+
+            if price is None:
+                price = self._extract_meta_price(
+                    soup
+                )
+
+            if price is None:
+                price = self._clean_numeric_price(
+                    fallback.get(
+                        "price"
+                    )
+                )
+
+            # =================================================
+            # CURRENCY
+            # =================================================
 
             currency = (
                 self._clean(
@@ -117,26 +226,128 @@ class OfferExtractor:
                 or self._extract_meta_currency(
                     soup
                 )
-                or fallback.get(
-                    "currency"
+                or self._clean(
+                    fallback.get(
+                        "currency"
+                    )
                 )
             )
 
-            seller = self._extract_seller(
-                offer_data
+            if currency:
+                currency = str(
+                    currency
+                ).upper()
+
+            # =================================================
+            # SELLER
+            # =================================================
+
+            seller = (
+                self._extract_seller(
+                    offer_data
+                )
+                or self._clean(
+                    fallback.get(
+                        "seller"
+                    )
+                )
+                or self._domain_as_seller(
+                    final_url
+                )
             )
 
+            # =================================================
+            # AVAILABILITY
+            # =================================================
+
             availability = (
-                self._clean(
-                    offer_data.get(
+                self._extract_availability(
+                    offer_data
+                )
+                or self._clean(
+                    fallback.get(
                         "availability"
                     )
                 )
-                or fallback.get(
-                    "availability"
+                or "unknown"
+            )
+
+            # =================================================
+            # CONDITION
+            # =================================================
+
+            condition = (
+                self._extract_condition(
+                    product_data,
+                    offer_data,
+                )
+                or self._clean(
+                    fallback.get(
+                        "condition"
+                    )
                 )
                 or "unknown"
             )
+
+            # =================================================
+            # ATTRIBUTES
+            # =================================================
+
+            attributes = self._extract_attributes(
+                product_data=product_data,
+                title=title,
+                description=description,
+                fallback=fallback,
+            )
+
+            # Condition belongs to attributes too.
+            if condition:
+                attributes["condition"] = condition
+
+            # =================================================
+            # IDENTIFIERS
+            # =================================================
+
+            sku = (
+                self._clean(
+                    product_data.get(
+                        "sku"
+                    )
+                )
+                or self._clean(
+                    fallback.get(
+                        "sku"
+                    )
+                )
+            )
+
+            mpn = (
+                self._clean(
+                    product_data.get(
+                        "mpn"
+                    )
+                )
+                or self._clean(
+                    fallback.get(
+                        "mpn"
+                    )
+                )
+            )
+
+            gtin = (
+                self._extract_gtin(
+                    product_data
+                )
+                or self._clean(
+                    fallback.get(
+                        "gtin"
+                    )
+                )
+            )
+
+            # =================================================
+            # IMAGE
+            # =================================================
 
             image = self._extract_image(
                 product_data
@@ -148,21 +359,67 @@ class OfferExtractor:
                     "og:image",
                 )
 
+            if not image:
+                image = self._clean(
+                    fallback.get(
+                        "image"
+                    )
+                )
+
+            # =================================================
+            # DOMAIN
+            # =================================================
+
             domain = urlparse(
                 final_url
             ).netloc
 
+            # =================================================
+            # RESULT
+            # =================================================
+
             return {
                 "title": title,
                 "brand": brand,
+                "model": model,
+                "product_type": product_type,
+                "category": category,
+
+                "attributes": attributes,
+
+                "storage": attributes.get(
+                    "storage"
+                ),
+                "color": attributes.get(
+                    "color"
+                ),
+                "size": attributes.get(
+                    "size"
+                ),
+                "material": attributes.get(
+                    "material"
+                ),
+                "gender": attributes.get(
+                    "gender"
+                ),
+                "condition": condition,
+
                 "price": price,
                 "currency": currency,
+
                 "description": description,
                 "image": image,
+
                 "seller": seller,
                 "availability": availability,
+
+                "sku": sku,
+                "mpn": mpn,
+                "gtin": gtin,
+
                 "url": final_url,
                 "domain": domain,
+
                 "extracted": True,
             }
 
@@ -177,6 +434,10 @@ class OfferExtractor:
                 fallback,
                 url=url,
             )
+
+    # =========================================================
+    # HTTP
+    # =========================================================
 
     @staticmethod
     def _headers():
@@ -196,7 +457,13 @@ class OfferExtractor:
                 "application/xhtml+xml,"
                 "application/xml;q=0.9,"
                 "*/*;q=0.8",
+            "Cache-Control":
+                "no-cache",
         }
+
+    # =========================================================
+    # JSON-LD
+    # =========================================================
 
     def _extract_json_ld(
         self,
@@ -223,26 +490,35 @@ class OfferExtractor:
                 continue
 
             try:
+
                 data = json.loads(
                     raw
                 )
 
             except Exception:
+
                 continue
 
             if isinstance(
                 data,
                 list,
             ):
+
                 results.extend(
                     data
                 )
+
             else:
+
                 results.append(
                     data
                 )
 
         return results
+
+    # =========================================================
+    # PRODUCT FINDER
+    # =========================================================
 
     def _find_product(
         self,
@@ -320,16 +596,49 @@ class OfferExtractor:
                     if found:
                         return found
 
-            for value in item.values():
+            # Некоторые сайты помещают Product
+            # внутрь mainEntity.
+            for key in (
+                "mainEntity",
+                "mainEntityOfPage",
+                "item",
+                "subjectOf",
+            ):
 
-                found = (
-                    self._find_product_recursive(
-                        value
-                    )
+                nested = item.get(
+                    key
                 )
 
-                if found:
-                    return found
+                if nested is not None:
+
+                    found = (
+                        self._find_product_recursive(
+                            nested
+                        )
+                    )
+
+                    if found:
+                        return found
+
+            # Общий recursive fallback.
+            for value in item.values():
+
+                if isinstance(
+                    value,
+                    (
+                        dict,
+                        list,
+                    ),
+                ):
+
+                    found = (
+                        self._find_product_recursive(
+                            value
+                        )
+                    )
+
+                    if found:
+                        return found
 
         elif isinstance(
             item,
@@ -348,6 +657,10 @@ class OfferExtractor:
                     return found
 
         return {}
+
+    # =========================================================
+    # OFFER
+    # =========================================================
 
     def _find_offer(
         self,
@@ -369,6 +682,24 @@ class OfferExtractor:
             list,
         ):
 
+            # Предпочитаем offer,
+            # в котором есть цена.
+            for offer in offers:
+
+                if not isinstance(
+                    offer,
+                    dict,
+                ):
+                    continue
+
+                if (
+                    offer.get("price")
+                    is not None
+                    or offer.get("lowPrice")
+                    is not None
+                ):
+                    return offer
+
             for offer in offers:
 
                 if isinstance(
@@ -379,6 +710,10 @@ class OfferExtractor:
 
         return {}
 
+    # =========================================================
+    # PRICE
+    # =========================================================
+
     def _extract_price(
         self,
         offer: dict[str, Any],
@@ -387,35 +722,175 @@ class OfferExtractor:
         if not offer:
             return None
 
-        price = offer.get(
-            "price"
+        candidates = [
+            offer.get("price"),
+            offer.get("lowPrice"),
+            offer.get("highPrice"),
+        ]
+
+        for value in candidates:
+
+            price = self._clean_numeric_price(
+                value
+            )
+
+            if price is not None:
+                return price
+
+        return None
+
+    def _extract_meta_price(
+        self,
+        soup: BeautifulSoup,
+    ):
+
+        candidates = [
+            "product:price:amount",
+            "og:price:amount",
+            "product:price",
+            "price",
+        ]
+
+        for candidate in candidates:
+
+            value = self._meta(
+                soup,
+                candidate,
+            )
+
+            price = self._clean_numeric_price(
+                value
+            )
+
+            if price is not None:
+                return price
+
+        # Часто ecommerce-сайты используют
+        # itemprop="price".
+        element = soup.find(
+            attrs={
+                "itemprop": "price"
+            }
         )
 
-        if price is None:
-            price = offer.get(
-                "lowPrice"
+        if element:
+
+            value = (
+                element.get("content")
+                or element.get_text(
+                    strip=True
+                )
             )
 
-        if price is None:
-            price = offer.get(
-                "highPrice"
+            price = self._clean_numeric_price(
+                value
             )
 
-        if price is None:
+            if price is not None:
+                return price
+
+        return None
+
+    @staticmethod
+    def _clean_numeric_price(
+        value,
+    ):
+
+        if value is None:
+            return None
+
+        if isinstance(
+            value,
+            (
+                int,
+                float,
+            ),
+        ):
+
+            return float(
+                value
+            )
+
+        text = str(
+            value
+        ).strip()
+
+        if not text:
+            return None
+
+        # Убираем валютные символы,
+        # пробелы и текст вокруг числа.
+        text = (
+            text
+            .replace("\xa0", " ")
+            .replace(" ", "")
+        )
+
+        # Если формат:
+        # 1,299.99
+        if (
+            "," in text
+            and "." in text
+        ):
+
+            if text.rfind(",") < text.rfind("."):
+                text = text.replace(
+                    ",",
+                    "",
+                )
+            else:
+                text = (
+                    text
+                    .replace(".", "")
+                    .replace(",", ".")
+                )
+
+        elif "," in text:
+
+            parts = text.split(",")
+
+            if (
+                len(parts) == 2
+                and len(parts[1]) <= 2
+            ):
+
+                text = (
+                    parts[0]
+                    + "."
+                    + parts[1]
+                )
+
+            else:
+
+                text = text.replace(
+                    ",",
+                    "",
+                )
+
+        match = re.search(
+            r"-?\d+(?:\.\d+)?",
+            text,
+        )
+
+        if not match:
             return None
 
         try:
+
             return float(
-                str(price)
-                .replace(",", ".")
-                .strip()
+                match.group(0)
             )
 
         except (
             TypeError,
             ValueError,
         ):
+
             return None
+
+    # =========================================================
+    # BRAND
+    # =========================================================
 
     def _extract_brand(
         self,
@@ -439,6 +914,628 @@ class OfferExtractor:
             brand
         )
 
+    def _infer_brand(
+        self,
+        title: str | None,
+    ):
+
+        if not title:
+            return None
+
+        normalized = title.lower()
+
+        known_brands = {
+            "apple": "Apple",
+            "samsung": "Samsung",
+            "google": "Google",
+            "xiaomi": "Xiaomi",
+            "oneplus": "OnePlus",
+            "huawei": "Huawei",
+            "sony": "Sony",
+            "lg": "LG",
+            "nike": "Nike",
+            "adidas": "Adidas",
+            "puma": "Puma",
+            "reebok": "Reebok",
+            "dell": "Dell",
+            "hp": "HP",
+            "lenovo": "Lenovo",
+            "asus": "ASUS",
+            "acer": "Acer",
+            "microsoft": "Microsoft",
+            "nintendo": "Nintendo",
+            "dyson": "Dyson",
+        }
+
+        for key, brand in known_brands.items():
+
+            if re.search(
+                rf"\b{re.escape(key)}\b",
+                normalized,
+            ):
+                return brand
+
+        return None
+
+    # =========================================================
+    # MODEL
+    # =========================================================
+
+    def _extract_model(
+        self,
+        product: dict[str, Any],
+    ):
+
+        for key in (
+            "model",
+            "modelNumber",
+            "model_number",
+        ):
+
+            value = self._clean(
+                product.get(key)
+            )
+
+            if value:
+                return value
+
+        return None
+
+    def _infer_model(
+        self,
+        title: str | None,
+    ):
+
+        if not title:
+            return None
+
+        normalized = " ".join(
+            str(title).split()
+        )
+
+        # Apple iPhone.
+        match = re.search(
+            r"\biphone\s+"
+            r"(?:\d+(?:\s+pro)?"
+            r"(?:\s+max)?"
+            r"(?:\s+plus)?"
+            r"(?:\s+mini)?"
+            r"(?:\s+pro\s+max)?)",
+            normalized,
+            re.IGNORECASE,
+        )
+
+        if match:
+            return match.group(
+                0
+            ).strip()
+
+        # Samsung Galaxy.
+        match = re.search(
+            r"\bgalaxy\s+"
+            r"[A-Za-z0-9]+"
+            r"(?:\s+[A-Za-z0-9]+){0,3}",
+            normalized,
+            re.IGNORECASE,
+        )
+
+        if match:
+            return match.group(
+                0
+            ).strip()
+
+        return None
+
+    # =========================================================
+    # PRODUCT TYPE
+    # =========================================================
+
+    def _extract_product_type(
+        self,
+        product: dict[str, Any],
+    ):
+
+        value = product.get(
+            "category"
+        )
+
+        if isinstance(
+            value,
+            str,
+        ):
+
+            return value.strip() or None
+
+        return None
+
+    # =========================================================
+    # CATEGORY
+    # =========================================================
+
+    def _extract_category(
+        self,
+        product: dict[str, Any],
+    ):
+
+        value = product.get(
+            "category"
+        )
+
+        return self._clean(
+            value
+        )
+
+    # =========================================================
+    # ATTRIBUTES
+    # =========================================================
+
+    def _extract_attributes(
+        self,
+        product_data: dict[str, Any],
+        title: str | None,
+        description: str | None,
+        fallback: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        attributes = {}
+
+        text_parts = [
+            title or "",
+            description or "",
+        ]
+
+        text = " ".join(
+            text_parts
+        )
+
+        # -----------------------------------------------------
+        # Storage
+        # -----------------------------------------------------
+
+        storage = (
+            fallback.get("storage")
+        )
+
+        if not storage:
+            storage = self._extract_storage(
+                product_data,
+                text,
+            )
+
+        if storage:
+            attributes["storage"] = storage
+
+        # -----------------------------------------------------
+        # Color
+        # -----------------------------------------------------
+
+        color = (
+            fallback.get("color")
+        )
+
+        if not color:
+            color = self._extract_color(
+                product_data,
+                text,
+            )
+
+        if color:
+            attributes["color"] = color
+
+        # -----------------------------------------------------
+        # Size
+        # -----------------------------------------------------
+
+        size = (
+            fallback.get("size")
+        )
+
+        if not size:
+            size = self._extract_property(
+                product_data,
+                "size",
+            )
+
+        if size:
+            attributes["size"] = size
+
+        # -----------------------------------------------------
+        # Material
+        # -----------------------------------------------------
+
+        material = (
+            fallback.get("material")
+        )
+
+        if not material:
+            material = self._extract_property(
+                product_data,
+                "material",
+            )
+
+        if material:
+            attributes["material"] = material
+
+        # -----------------------------------------------------
+        # Gender
+        # -----------------------------------------------------
+
+        gender = (
+            fallback.get("gender")
+        )
+
+        if not gender:
+            gender = self._extract_gender(
+                product_data,
+                text,
+            )
+
+        if gender:
+            attributes["gender"] = gender
+
+        # -----------------------------------------------------
+        # Quantity
+        # -----------------------------------------------------
+
+        quantity = (
+            fallback.get("quantity")
+        )
+
+        if not quantity:
+            quantity = self._extract_property(
+                product_data,
+                "quantity",
+            )
+
+        if quantity:
+            attributes["quantity"] = quantity
+
+        # -----------------------------------------------------
+        # Capacity
+        # -----------------------------------------------------
+
+        capacity = (
+            fallback.get("capacity")
+        )
+
+        if not capacity:
+            capacity = self._extract_property(
+                product_data,
+                "capacity",
+            )
+
+        if capacity:
+            attributes["capacity"] = capacity
+
+        # -----------------------------------------------------
+        # Voltage
+        # -----------------------------------------------------
+
+        voltage = (
+            fallback.get("voltage")
+        )
+
+        if not voltage:
+            voltage = self._extract_property(
+                product_data,
+                "voltage",
+            )
+
+        if voltage:
+            attributes["voltage"] = voltage
+
+        # -----------------------------------------------------
+        # Compatibility
+        # -----------------------------------------------------
+
+        compatibility = (
+            fallback.get("compatibility")
+        )
+
+        if not compatibility:
+            compatibility = self._extract_property(
+                product_data,
+                "isCompatibleWith",
+            )
+
+        if compatibility:
+            attributes["compatibility"] = compatibility
+
+        return attributes
+
+    def _extract_storage(
+        self,
+        product: dict[str, Any],
+        text: str,
+    ):
+
+        for key in (
+            "storage",
+            "capacity",
+            "memory",
+        ):
+
+            value = self._extract_property(
+                product,
+                key,
+            )
+
+            if value:
+                normalized = self._normalize_storage(
+                    value
+                )
+
+                if normalized:
+                    return normalized
+
+        match = re.search(
+            r"\b"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*"
+            r"(TB|GB|ГБ|ТБ)"
+            r"\b",
+            text,
+            re.IGNORECASE,
+        )
+
+        if match:
+
+            value = match.group(1)
+            unit = match.group(2)
+
+            return (
+                f"{value} "
+                f"{unit.upper()}"
+            )
+
+        return None
+
+    @staticmethod
+    def _normalize_storage(
+        value,
+    ):
+
+        if value is None:
+            return None
+
+        text = str(
+            value
+        ).strip()
+
+        match = re.search(
+            r"(\d+(?:\.\d+)?)\s*"
+            r"(TB|GB|ГБ|ТБ)",
+            text,
+            re.IGNORECASE,
+        )
+
+        if not match:
+            return text or None
+
+        number = match.group(1)
+        unit = match.group(2).upper()
+
+        return (
+            f"{number} "
+            f"{unit}"
+        )
+
+    def _extract_color(
+        self,
+        product: dict[str, Any],
+        text: str,
+    ):
+
+        value = self._extract_property(
+            product,
+            "color",
+        )
+
+        if value:
+            return value
+
+        colors = [
+            "black",
+            "white",
+            "blue",
+            "red",
+            "green",
+            "yellow",
+            "purple",
+            "pink",
+            "orange",
+            "gray",
+            "grey",
+            "silver",
+            "gold",
+            "titanium",
+            "черный",
+            "чёрный",
+            "белый",
+            "синий",
+            "красный",
+            "зеленый",
+            "зелёный",
+            "желтый",
+            "жёлтый",
+            "фиолетовый",
+            "розовый",
+        ]
+
+        normalized_text = text.lower()
+
+        for color in colors:
+
+            if re.search(
+                rf"\b{re.escape(color)}\b",
+                normalized_text,
+            ):
+                return color
+
+        return None
+
+    def _extract_gender(
+        self,
+        product: dict[str, Any],
+        text: str,
+    ):
+
+        value = self._extract_property(
+            product,
+            "gender",
+        )
+
+        if value:
+            return value
+
+        normalized = text.lower()
+
+        if re.search(
+            r"\bmen'?s\b|\bmale\b|\bмуж",
+            normalized,
+        ):
+            return "men"
+
+        if re.search(
+            r"\bwomen'?s\b|\bfemale\b|\bжен",
+            normalized,
+        ):
+            return "women"
+
+        if re.search(
+            r"\bunisex\b|\bунисекс\b",
+            normalized,
+        ):
+            return "unisex"
+
+        return None
+
+    def _extract_property(
+        self,
+        product: dict[str, Any],
+        key: str,
+    ):
+
+        value = product.get(
+            key
+        )
+
+        if value is None:
+            return None
+
+        if isinstance(
+            value,
+            dict,
+        ):
+
+            for nested_key in (
+                "value",
+                "name",
+                "valueReference",
+            ):
+
+                nested = value.get(
+                    nested_key
+                )
+
+                if nested is not None:
+
+                    return self._clean(
+                        nested
+                    )
+
+            return None
+
+        return self._clean(
+            value
+        )
+
+    # =========================================================
+    # CONDITION
+    # =========================================================
+
+    def _extract_condition(
+        self,
+        product: dict[str, Any],
+        offer: dict[str, Any],
+    ):
+
+        value = (
+            offer.get(
+                "itemCondition"
+            )
+            or product.get(
+                "itemCondition"
+            )
+        )
+
+        if not value:
+            return None
+
+        text = str(
+            value
+        ).lower()
+
+        if "new" in text:
+            return "new"
+
+        if (
+            "used" in text
+            or "preowned" in text
+            or "pre-owned" in text
+        ):
+            return "used"
+
+        if "refurbished" in text:
+            return "refurbished"
+
+        if "renewed" in text:
+            return "renewed"
+
+        return self._clean(
+            value
+        )
+
+    # =========================================================
+    # AVAILABILITY
+    # =========================================================
+
+    def _extract_availability(
+        self,
+        offer: dict[str, Any],
+    ):
+
+        value = offer.get(
+            "availability"
+        )
+
+        if not value:
+            return None
+
+        text = str(
+            value
+        ).lower()
+
+        if "instock" in text:
+            return "in_stock"
+
+        if "outofstock" in text:
+            return "out_of_stock"
+
+        if "preorder" in text:
+            return "preorder"
+
+        if "limited" in text:
+            return "limited"
+
+        return self._clean(
+            value
+        )
+
+    # =========================================================
+    # SELLER
+    # =========================================================
+
     def _extract_seller(
         self,
         offer: dict[str, Any],
@@ -461,6 +1558,54 @@ class OfferExtractor:
             seller
         )
 
+    @staticmethod
+    def _domain_as_seller(
+        url: str,
+    ):
+
+        domain = urlparse(
+            url
+        ).netloc.lower()
+
+        if domain.startswith(
+            "www."
+        ):
+            domain = domain[4:]
+
+        return domain or None
+
+    # =========================================================
+    # IDENTIFIERS
+    # =========================================================
+
+    def _extract_gtin(
+        self,
+        product: dict[str, Any],
+    ):
+
+        for key in (
+            "gtin",
+            "gtin8",
+            "gtin12",
+            "gtin13",
+            "gtin14",
+        ):
+
+            value = self._clean(
+                product.get(
+                    key
+                )
+            )
+
+            if value:
+                return value
+
+        return None
+
+    # =========================================================
+    # IMAGE
+    # =========================================================
+
     def _extract_image(
         self,
         product: dict[str, Any],
@@ -476,7 +1621,22 @@ class OfferExtractor:
         ):
 
             if image:
-                return image[0]
+
+                first = image[0]
+
+                if isinstance(
+                    first,
+                    dict,
+                ):
+
+                    return (
+                        first.get("url")
+                        or first.get(
+                            "contentUrl"
+                        )
+                    )
+
+                return first
 
             return None
 
@@ -487,10 +1647,18 @@ class OfferExtractor:
 
             return (
                 image.get("url")
-                or image.get("contentUrl")
+                or image.get(
+                    "contentUrl"
+                )
             )
 
-        return image
+        return self._clean(
+            image
+        )
+
+    # =========================================================
+    # META
+    # =========================================================
 
     @staticmethod
     def _meta(
@@ -531,6 +1699,7 @@ class OfferExtractor:
         candidates = [
             "product:price:currency",
             "og:price:currency",
+            "priceCurrency",
         ]
 
         for candidate in candidates:
@@ -543,7 +1712,34 @@ class OfferExtractor:
             if value:
                 return value.strip().upper()
 
+        element = soup.find(
+            attrs={
+                "itemprop":
+                    "priceCurrency"
+            }
+        )
+
+        if element:
+
+            value = (
+                element.get(
+                    "content"
+                )
+                or element.get_text(
+                    strip=True
+                )
+            )
+
+            if value:
+                return str(
+                    value
+                ).strip().upper()
+
         return None
+
+    # =========================================================
+    # CLEAN
+    # =========================================================
 
     @staticmethod
     def _clean(
@@ -558,7 +1754,14 @@ class OfferExtractor:
             str,
         ):
 
-            value = value.strip()
+            value = (
+                value
+                .replace(
+                    "\xa0",
+                    " ",
+                )
+                .strip()
+            )
 
             return value or None
 
@@ -566,33 +1769,133 @@ class OfferExtractor:
             value
         ).strip() or None
 
+    # =========================================================
+    # FALLBACK
+    # =========================================================
+
     @staticmethod
     def _fallback_result(
         fallback: dict[str, Any],
         url: str | None = None,
     ):
 
+        attributes = fallback.get(
+            "attributes",
+            {},
+        )
+
+        if not isinstance(
+            attributes,
+            dict,
+        ):
+            attributes = {}
+
+        condition = (
+            fallback.get(
+                "condition"
+            )
+            or attributes.get(
+                "condition"
+            )
+            or "unknown"
+        )
+
         return {
             "title":
-                fallback.get("title"),
+                fallback.get(
+                    "title"
+                ),
 
             "brand":
-                fallback.get("brand"),
+                fallback.get(
+                    "brand"
+                ),
+
+            "model":
+                fallback.get(
+                    "model"
+                ),
+
+            "product_type":
+                fallback.get(
+                    "product_type"
+                ),
+
+            "category":
+                fallback.get(
+                    "category"
+                ),
+
+            "attributes":
+                attributes,
+
+            "storage":
+                fallback.get(
+                    "storage"
+                )
+                or attributes.get(
+                    "storage"
+                ),
+
+            "color":
+                fallback.get(
+                    "color"
+                )
+                or attributes.get(
+                    "color"
+                ),
+
+            "size":
+                fallback.get(
+                    "size"
+                )
+                or attributes.get(
+                    "size"
+                ),
+
+            "material":
+                fallback.get(
+                    "material"
+                )
+                or attributes.get(
+                    "material"
+                ),
+
+            "gender":
+                fallback.get(
+                    "gender"
+                )
+                or attributes.get(
+                    "gender"
+                ),
+
+            "condition":
+                condition,
 
             "price":
-                fallback.get("price"),
+                fallback.get(
+                    "price"
+                ),
 
             "currency":
-                fallback.get("currency"),
+                fallback.get(
+                    "currency"
+                ),
 
             "description":
-                fallback.get("description"),
+                fallback.get(
+                    "description"
+                ),
 
             "image":
-                fallback.get("image"),
+                fallback.get(
+                    "image"
+                ),
 
             "seller":
-                fallback.get("seller"),
+                fallback.get(
+                    "seller"
+                ),
 
             "availability":
                 fallback.get(
@@ -600,12 +1903,31 @@ class OfferExtractor:
                     "unknown",
                 ),
 
+            "sku":
+                fallback.get(
+                    "sku"
+                ),
+
+            "mpn":
+                fallback.get(
+                    "mpn"
+                ),
+
+            "gtin":
+                fallback.get(
+                    "gtin"
+                ),
+
             "url":
                 url
-                or fallback.get("url"),
+                or fallback.get(
+                    "url"
+                ),
 
             "domain":
-                fallback.get("domain"),
+                fallback.get(
+                    "domain"
+                ),
 
             "extracted":
                 False,
