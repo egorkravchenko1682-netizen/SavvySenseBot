@@ -81,46 +81,85 @@ class SavvyCore:
         request: SavvyRequest,
     ) -> SavvyResponse:
 
-        self._prepare_request(request)
+        # =====================================================
+        # REQUEST
+        # =====================================================
 
-        input_data = self._parse_input(request)
+        self._prepare_request(
+            request
+        )
+
+        # =====================================================
+        # INPUT
+        # =====================================================
+
+        input_data = self._parse_input(
+            request
+        )
+
+        # =====================================================
+        # INTENT
+        # =====================================================
 
         intent = detect_intent(
             text=request.text,
             input_type=input_data["type"],
         )
 
+        # =====================================================
+        # PRODUCT IDENTITY
+        # =====================================================
+
         product = identify_product(
             text=request.text,
             input_type=input_data["type"],
         )
+
+        # =====================================================
+        # PRODUCT DNA
+        # =====================================================
 
         product_dna = build_product_dna(
             product=product,
             user=request.user,
         )
 
+        # =====================================================
+        # SEARCH PLAN
+        # =====================================================
+
         search_plan = build_search_plan(
             product_dna=product_dna,
         )
 
+        # =====================================================
+        # GLOBAL SEARCH
+        # =====================================================
+
         raw_offers = []
 
-        if search_plan.get("queries"):
-            raw_offers = self.search_engine.search(
-                queries=search_plan["queries"],
-                region=search_plan.get(
-                    "region",
-                    request.user.region,
-                ),
-                currency=search_plan.get(
-                    "currency",
-                    request.user.currency,
-                ),
-                budget=search_plan.get(
-                    "budget",
-                    {},
-                ),
+        if search_plan.get(
+            "queries"
+        ):
+
+            raw_offers = (
+                self.search_engine.search(
+                    queries=search_plan[
+                        "queries"
+                    ],
+                    region=search_plan.get(
+                        "region",
+                        request.user.region,
+                    ),
+                    currency=search_plan.get(
+                        "currency",
+                        request.user.currency,
+                    ),
+                    budget=search_plan.get(
+                        "budget",
+                        {},
+                    ),
+                )
             )
 
         print(
@@ -128,91 +167,382 @@ class SavvyCore:
             f"raw offers = {len(raw_offers)}"
         )
 
+        # =====================================================
+        # OFFER EXTRACTION
+        # =====================================================
+
         enriched_offers = []
 
         for offer in raw_offers:
 
-            url = offer.get("url")
+            url = offer.get(
+                "url"
+            )
+
+            # -------------------------------------------------
+            # No URL
+            # -------------------------------------------------
 
             if not url:
-                enriched_offers.append(offer)
+
+                enriched_offers.append(
+                    offer
+                )
+
                 continue
 
+            # -------------------------------------------------
+            # Extract
+            # -------------------------------------------------
+
             try:
-                extracted = self.offer_extractor.extract(
-                    url=url,
-                    fallback=offer,
+
+                extracted = (
+                    self.offer_extractor.extract(
+                        url=url,
+                        fallback=offer,
+                    )
                 )
+
             except Exception as error:
+
                 print(
                     "Offer extraction failed: "
                     f"{url}: {error}"
                 )
+
                 extracted = {}
+
+            # -------------------------------------------------
+            # Existing fallback data
+            # -------------------------------------------------
+
+            fallback_product = (
+                offer.get(
+                    "product",
+                    {},
+                )
+            )
+
+            if not isinstance(
+                fallback_product,
+                dict,
+            ):
+
+                fallback_product = {}
+
+            fallback_attributes = (
+                fallback_product.get(
+                    "attributes",
+                    {},
+                )
+            )
+
+            if not isinstance(
+                fallback_attributes,
+                dict,
+            ):
+
+                fallback_attributes = {}
+
+            extracted_attributes = (
+                extracted.get(
+                    "attributes",
+                    {},
+                )
+            )
+
+            if not isinstance(
+                extracted_attributes,
+                dict,
+            ):
+
+                extracted_attributes = {}
+
+            # -------------------------------------------------
+            # Merge attributes
+            # -------------------------------------------------
+
+            merged_attributes = {
+                **fallback_attributes,
+                **extracted_attributes,
+            }
+
+            # Explicit extractor fields
+            # have priority.
+            for attribute in (
+                "storage",
+                "color",
+                "size",
+                "material",
+                "gender",
+                "condition",
+                "quantity",
+                "capacity",
+                "voltage",
+                "compatibility",
+            ):
+
+                value = extracted.get(
+                    attribute
+                )
+
+                if value is not None:
+
+                    merged_attributes[
+                        attribute
+                    ] = value
+
+            # -------------------------------------------------
+            # Product fields
+            # -------------------------------------------------
+
+            product_title = (
+                extracted.get(
+                    "title"
+                )
+                or fallback_product.get(
+                    "title"
+                )
+                or offer.get(
+                    "title"
+                )
+            )
+
+            product_brand = (
+                extracted.get(
+                    "brand"
+                )
+                or fallback_product.get(
+                    "brand"
+                )
+                or offer.get(
+                    "brand"
+                )
+            )
+
+            product_model = (
+                extracted.get(
+                    "model"
+                )
+                or fallback_product.get(
+                    "model"
+                )
+                or offer.get(
+                    "model"
+                )
+            )
+
+            product_type = (
+                extracted.get(
+                    "product_type"
+                )
+                or fallback_product.get(
+                    "product_type"
+                )
+                or offer.get(
+                    "product_type"
+                )
+            )
+
+            product_category = (
+                extracted.get(
+                    "category"
+                )
+                or fallback_product.get(
+                    "category"
+                )
+                or offer.get(
+                    "category"
+                )
+            )
+
+            # -------------------------------------------------
+            # Ensure condition is preserved
+            # -------------------------------------------------
+
+            condition = (
+                extracted.get(
+                    "condition"
+                )
+                or offer.get(
+                    "condition"
+                )
+                or fallback_product.get(
+                    "condition"
+                )
+                or merged_attributes.get(
+                    "condition"
+                )
+                or "unknown"
+            )
+
+            merged_attributes[
+                "condition"
+            ] = condition
+
+            # -------------------------------------------------
+            # Build normalized product
+            # -------------------------------------------------
+
+            normalized_product = {
+
+                "title":
+                    product_title,
+
+                "brand":
+                    product_brand,
+
+                "model":
+                    product_model,
+
+                "category":
+                    product_category,
+
+                "product_type":
+                    product_type,
+
+                "attributes":
+                    merged_attributes,
+            }
+
+            # -------------------------------------------------
+            # Build enriched offer
+            # -------------------------------------------------
 
             enriched_offer = {
                 **offer,
 
-                "product": {
-                    "title": (
-                        extracted.get("title")
-                        or offer.get("title")
+                "product":
+                    normalized_product,
+
+                "title":
+                    product_title,
+
+                "brand":
+                    product_brand,
+
+                "model":
+                    product_model,
+
+                "category":
+                    product_category,
+
+                "product_type":
+                    product_type,
+
+                "attributes":
+                    merged_attributes,
+
+                "price":
+                    (
+                        extracted.get(
+                            "price"
+                        )
+                        if extracted.get(
+                            "price"
+                        ) is not None
+                        else offer.get(
+                            "price"
+                        )
                     ),
-                    "brand": (
-                        extracted.get("brand")
-                        or offer.get("brand")
+
+                "currency":
+                    (
+                        extracted.get(
+                            "currency"
+                        )
+                        or offer.get(
+                            "currency"
+                        )
                     ),
-                    "category": offer.get("category"),
-                    "product_type": offer.get(
-                        "product_type"
+
+                "seller":
+                    (
+                        extracted.get(
+                            "seller"
+                        )
+                        or offer.get(
+                            "seller"
+                        )
                     ),
-                    "model": offer.get("model"),
-                    "attributes": offer.get(
-                        "attributes",
-                        {},
+
+                "availability":
+                    (
+                        extracted.get(
+                            "availability"
+                        )
+                        or offer.get(
+                            "availability"
+                        )
                     ),
-                },
 
-                "price": (
-                    extracted.get("price")
-                    if extracted.get("price") is not None
-                    else offer.get("price")
-                ),
+                "condition":
+                    condition,
 
-                "currency": (
-                    extracted.get("currency")
-                    or offer.get("currency")
-                ),
+                "description":
+                    (
+                        extracted.get(
+                            "description"
+                        )
+                        or offer.get(
+                            "description"
+                        )
+                    ),
 
-                "seller": (
-                    extracted.get("seller")
-                    or offer.get("seller")
-                ),
+                "image":
+                    (
+                        extracted.get(
+                            "image"
+                        )
+                        or offer.get(
+                            "image"
+                        )
+                    ),
 
-                "availability": (
-                    extracted.get("availability")
-                    or offer.get("availability")
-                ),
+                "sku":
+                    (
+                        extracted.get(
+                            "sku"
+                        )
+                        or offer.get(
+                            "sku"
+                        )
+                    ),
 
-                "description": (
-                    extracted.get("description")
-                    or offer.get("description")
-                ),
+                "mpn":
+                    (
+                        extracted.get(
+                            "mpn"
+                        )
+                        or offer.get(
+                            "mpn"
+                        )
+                    ),
 
-                "image": (
-                    extracted.get("image")
-                    or offer.get("image")
-                ),
+                "gtin":
+                    (
+                        extracted.get(
+                            "gtin"
+                        )
+                        or offer.get(
+                            "gtin"
+                        )
+                    ),
 
-                "url": (
-                    extracted.get("url")
-                    or url
-                ),
+                "url":
+                    (
+                        extracted.get(
+                            "url"
+                        )
+                        or url
+                    ),
 
-                "extracted": extracted.get(
-                    "extracted",
-                    False,
-                ),
+                "extracted":
+                    extracted.get(
+                        "extracted",
+                        False,
+                    ),
             }
 
             enriched_offers.append(
@@ -221,40 +551,62 @@ class SavvyCore:
 
         raw_offers = enriched_offers
 
+        # =====================================================
+        # MATCHING
+        # =====================================================
+
         matched_offers = []
+
         rejected_offers = []
 
         exact_count = 0
+
         similar_count = 0
 
         for offer in raw_offers:
 
-            match = self.product_matcher.match(
-                product=product,
-                offer=offer,
-            )
-
-            product_data = offer.get(
-                "product",
-                {},
-            )
-
-            if isinstance(product_data, dict):
-                title = product_data.get(
-                    "title",
-                    ""
+            match = (
+                self.product_matcher.match(
+                    product=product_dna,
+                    offer=offer,
                 )
+            )
+
+            product_data = (
+                offer.get(
+                    "product",
+                    {},
+                )
+            )
+
+            if isinstance(
+                product_data,
+                dict,
+            ):
+
+                title = (
+                    product_data.get(
+                        "title",
+                        "",
+                    )
+                )
+
             else:
-                title = offer.get(
-                    "title",
-                    ""
+
+                title = (
+                    offer.get(
+                        "title",
+                        "",
+                    )
                 )
 
             print(
                 "SAVVY MATCH: "
                 f"{title} | "
-                f"status={match.status.value} | "
-                f"score={match.score}"
+                f"status="
+                f"{match.status.value} | "
+                f"score="
+                f"{match.score}"
             )
 
             enriched_offer = {
@@ -262,104 +614,185 @@ class SavvyCore:
                 "match_result": match,
             }
 
+            # -------------------------------------------------
+            # REJECTED
+            # -------------------------------------------------
+
             if match.is_rejected:
+
                 rejected_offers.append(
                     enriched_offer
                 )
+
                 continue
+
+            # -------------------------------------------------
+            # ACCEPTED
+            # -------------------------------------------------
 
             matched_offers.append(
                 enriched_offer
             )
 
             if match.is_exact:
+
                 exact_count += 1
 
             elif match.is_similar:
+
                 similar_count += 1
 
         print(
             "SAVVY DEBUG: "
-            f"matched={len(matched_offers)}, "
-            f"rejected={len(rejected_offers)}, "
-            f"exact={exact_count}, "
-            f"similar={similar_count}"
+            f"matched="
+            f"{len(matched_offers)}, "
+            f"rejected="
+            f"{len(rejected_offers)}, "
+            f"exact="
+            f"{exact_count}, "
+            f"similar="
+            f"{similar_count}"
         )
+
+        # =====================================================
+        # NORMALIZATION
+        # =====================================================
 
         offers = normalize_offers(
             matched_offers
         )
 
+        # =====================================================
+        # REAL COST
+        # =====================================================
+
         offers = calculate_offers_real_cost(
             offers=offers,
-            target_currency=request.user.currency,
-            converter=self.currency_converter,
+            target_currency=(
+                request.user.currency
+            ),
+            converter=(
+                self.currency_converter
+            ),
         )
 
-        deal_analysis = self.deal_engine.analyze(
-            offers=offers,
-            product=product,
+        # =====================================================
+        # DEAL ENGINE
+        # =====================================================
+
+        deal_analysis = (
+            self.deal_engine.analyze(
+                offers=offers,
+                product=product_dna,
+            )
         )
 
-        classified_offers = deal_analysis.get(
-            "classified_offers",
-            [],
+        classified_offers = (
+            deal_analysis.get(
+                "classified_offers",
+                [],
+            )
         )
 
         if classified_offers:
-            offers = classified_offers
+
+            offers = (
+                classified_offers
+            )
+
+        # =====================================================
+        # RESPONSE
+        # =====================================================
 
         return SavvyResponse(
             success=True,
+
             intent=intent,
+
             data={
-                "region": request.user.region,
 
-                "currency": request.user.currency,
+                "region":
+                    request.user.region,
 
-                "input": input_data,
+                "currency":
+                    request.user.currency,
 
-                "product": product,
+                "input":
+                    input_data,
 
-                "product_dna": product_dna,
+                "product":
+                    product,
 
-                "search_plan": search_plan,
+                "product_dna":
+                    product_dna,
 
-                "raw_offers": raw_offers,
+                "search_plan":
+                    search_plan,
 
-                "matched_offers": matched_offers,
+                "raw_offers":
+                    raw_offers,
 
-                "rejected_offers": rejected_offers,
+                "matched_offers":
+                    matched_offers,
 
-                "offers": offers,
+                "rejected_offers":
+                    rejected_offers,
 
-                "deal_analysis": deal_analysis,
+                "offers":
+                    offers,
+
+                "deal_analysis":
+                    deal_analysis,
 
                 "matching": {
-                    "total_candidates": len(
-                        raw_offers
-                    ),
-                    "accepted": len(
-                        matched_offers
-                    ),
-                    "rejected": len(
-                        rejected_offers
-                    ),
-                    "exact": exact_count,
-                    "similar": similar_count,
+
+                    "total_candidates":
+                        len(
+                            raw_offers
+                        ),
+
+                    "accepted":
+                        len(
+                            matched_offers
+                        ),
+
+                    "rejected":
+                        len(
+                            rejected_offers
+                        ),
+
+                    "exact":
+                        exact_count,
+
+                    "similar":
+                        similar_count,
                 },
             },
         )
+
+    # =========================================================
+    # REQUEST PREPARATION
+    # =========================================================
 
     def _prepare_request(
         self,
         request: SavvyRequest,
     ):
+
         if request.user is None:
+
             request.user = UserContext(
-                region=self.config.default_region,
-                currency=self.config.default_currency,
+                region=(
+                    self.config.default_region
+                ),
+                currency=(
+                    self.config.default_currency
+                ),
             )
+
+    # =========================================================
+    # INPUT PARSER
+    # =========================================================
 
     def _parse_input(
         self,
@@ -367,22 +800,30 @@ class SavvyCore:
     ) -> dict:
 
         if request.url:
+
             return parse_url(
                 request.url
             )
 
         if request.image is not None:
+
             return parse_photo(
                 request.image
             )
 
         if request.text:
+
             return parse_text(
                 request.text
             )
 
         return {
-            "type": "unknown",
-            "value": None,
-            "valid": False,
+            "type":
+                "unknown",
+
+            "value":
+                None,
+
+            "valid":
+                False,
         }
