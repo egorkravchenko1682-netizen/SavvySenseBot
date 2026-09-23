@@ -5,27 +5,46 @@ from typing import Any
 from .deal_candidates import DealCandidates
 from .deal_comparator import DealComparator
 from .deal_budget import DealBudget
+from .deal_condition import DealCondition
 
 
 class DealEngine:
-    """Формирует базовую сделку с учётом бюджета."""
+    """Формирует сделку с учётом состояния и бюджета."""
 
     def __init__(self) -> None:
         self.candidates = DealCandidates()
         self.comparator = DealComparator()
         self.budget = DealBudget()
+        self.condition = DealCondition()
 
     def evaluate(
         self,
         offers: list[dict[str, Any]],
         budget: float | None = None,
         budget_currency: str | None = None,
+        requested_condition: str = "any",
     ) -> dict[str, Any]:
 
         candidates = self.candidates.select(offers)
 
-        exact = candidates["exact"]
-        similar = candidates["similar"]
+        condition_result = self.condition.apply(
+            offers=candidates["exact"] + candidates["similar"],
+            requested_condition=requested_condition,
+        )
+
+        filtered_offers = condition_result["offers"]
+
+        exact = [
+            offer
+            for offer in filtered_offers
+            if offer.get("status") == "exact"
+        ]
+
+        similar = [
+            offer
+            for offer in filtered_offers
+            if offer.get("status") == "similar"
+        ]
 
         exact_budget = self.budget.apply(
             exact,
@@ -48,7 +67,9 @@ class DealEngine:
                 deal_type="exact",
                 result=exact_result,
                 candidates=candidates,
-                budget_result=exact_budget,
+                condition_result=condition_result,
+                exact_budget=exact_budget,
+                similar_budget=similar_budget,
             )
 
         similar_result = self.comparator.find_cheapest(
@@ -60,7 +81,9 @@ class DealEngine:
                 deal_type="similar",
                 result=similar_result,
                 candidates=candidates,
-                budget_result=similar_budget,
+                condition_result=condition_result,
+                exact_budget=exact_budget,
+                similar_budget=similar_budget,
             )
 
         return {
@@ -78,6 +101,15 @@ class DealEngine:
                 exact_budget["over_budget_count"]
                 + similar_budget["over_budget_count"]
             ),
+            "condition_matched_count": (
+                condition_result["matched_count"]
+            ),
+            "condition_mismatched_count": (
+                condition_result["mismatched_count"]
+            ),
+            "condition_unknown_count": (
+                condition_result["unknown_count"]
+            ),
         }
 
     @staticmethod
@@ -85,7 +117,9 @@ class DealEngine:
         deal_type: str,
         result: dict[str, Any],
         candidates: dict[str, Any],
-        budget_result: dict[str, Any],
+        condition_result: dict[str, Any],
+        exact_budget: dict[str, Any],
+        similar_budget: dict[str, Any],
     ) -> dict[str, Any]:
 
         return {
@@ -93,8 +127,29 @@ class DealEngine:
             "best_offer": result["cheapest"],
             "comparison_known": True,
             "comparison_source": result["comparison_source"],
+
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
-            "within_budget_count": budget_result["within_budget_count"],
-            "over_budget_count": budget_result["over_budget_count"],
+
+            "within_budget_count": (
+                exact_budget["within_budget_count"]
+                + similar_budget["within_budget_count"]
+            ),
+
+            "over_budget_count": (
+                exact_budget["over_budget_count"]
+                + similar_budget["over_budget_count"]
+            ),
+
+            "condition_matched_count": (
+                condition_result["matched_count"]
+            ),
+
+            "condition_mismatched_count": (
+                condition_result["mismatched_count"]
+            ),
+
+            "condition_unknown_count": (
+                condition_result["unknown_count"]
+            ),
         }
