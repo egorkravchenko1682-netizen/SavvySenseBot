@@ -12,6 +12,8 @@ from .deal_quality_result import DealQualityResult
 from .offer_reliability import OfferReliability
 from .offer_risk import OfferRisk
 from .review_confidence import ReviewConfidence
+from .risk_level import RiskLevel
+from .risk_filter import RiskFilter
 
 
 class DealEngine:
@@ -28,6 +30,8 @@ class DealEngine:
         self.review_confidence = ReviewConfidence()
         self.reliability = OfferReliability()
         self.risk = OfferRisk()
+        self.risk_level = RiskLevel()
+        self.risk_filter = RiskFilter()
 
     def evaluate(
         self,
@@ -71,7 +75,6 @@ class DealEngine:
                     "review_confidence_known": review_confidence[
                         "review_confidence_known"
                     ],
-
                     "offer_reliability": reliability[
                         "offer_reliability"
                     ],
@@ -150,7 +153,31 @@ class DealEngine:
                 }
             )
 
-            enriched_offers.append(enriched_offer)
+            risk_level = self.risk_level.evaluate(
+                risk
+            )
+
+            enriched_offer.update(
+                {
+                    "risk_level": risk_level[
+                        "risk_level"
+                    ],
+                    "risk_level_score": risk_level[
+                        "risk_level_score"
+                    ],
+                    "risk_level_known": risk_level[
+                        "risk_level_known"
+                    ],
+                }
+            )
+
+            enriched_offers.append(
+                enriched_offer
+            )
+
+        risk_result = self.risk_filter.select(
+            enriched_offers
+        )
 
         exact = [
             offer
@@ -188,6 +215,7 @@ class DealEngine:
                 condition_result=condition_result,
                 exact_budget=exact_budget,
                 similar_budget=similar_budget,
+                risk_result=risk_result,
             )
 
         similar_result = self.comparator.find_best(
@@ -202,6 +230,7 @@ class DealEngine:
                 condition_result=condition_result,
                 exact_budget=exact_budget,
                 similar_budget=similar_budget,
+                risk_result=risk_result,
             )
 
         return {
@@ -218,6 +247,9 @@ class DealEngine:
             "offer_risk": None,
             "offer_risk_points": None,
             "offer_risk_known": False,
+            "risk_level": None,
+            "risk_level_score": None,
+            "risk_level_known": False,
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
             "within_budget_count": (
@@ -237,6 +269,9 @@ class DealEngine:
             "condition_unknown_count": (
                 condition_result["unknown_count"]
             ),
+            "safe_count": risk_result["safe_count"],
+            "risky_count": risk_result["risky_count"],
+            "risk_unknown_count": risk_result["unknown_count"],
         }
 
     def _result(
@@ -247,6 +282,7 @@ class DealEngine:
         condition_result: dict[str, Any],
         exact_budget: dict[str, Any],
         similar_budget: dict[str, Any],
+        risk_result: dict[str, Any],
     ) -> dict[str, Any]:
 
         best_offer = result["best_offer"]
@@ -294,6 +330,17 @@ class DealEngine:
             ),
             "offer_risk_known": best_offer.get(
                 "offer_risk_known",
+                False,
+            ),
+
+            "risk_level": best_offer.get(
+                "risk_level"
+            ),
+            "risk_level_score": best_offer.get(
+                "risk_level_score"
+            ),
+            "risk_level_known": best_offer.get(
+                "risk_level_known",
                 False,
             ),
 
@@ -361,4 +408,14 @@ class DealEngine:
                     "unknown_count"
                 ]
             ),
+
+            "safe_count": risk_result[
+                "safe_count"
+            ],
+            "risky_count": risk_result[
+                "risky_count"
+            ],
+            "risk_unknown_count": risk_result[
+                "unknown_count"
+            ],
         }
