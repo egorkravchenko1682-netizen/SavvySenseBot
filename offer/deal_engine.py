@@ -7,6 +7,7 @@ from .deal_quality_comparator import DealQualityComparator
 from .deal_budget import DealBudget
 from .deal_condition import DealCondition
 from .deal_quality_result import DealQualityResult
+from .review_confidence import ReviewConfidence
 
 
 class DealEngine:
@@ -18,6 +19,7 @@ class DealEngine:
         self.budget = DealBudget()
         self.condition = DealCondition()
         self.quality_result = DealQualityResult()
+        self.review_confidence = ReviewConfidence()
 
     def evaluate(
         self,
@@ -36,15 +38,40 @@ class DealEngine:
 
         filtered_offers = condition_result["offers"]
 
+        enriched_offers = []
+
+        for offer in filtered_offers:
+            confidence = self.review_confidence.calculate(
+                offer.get("review_count")
+            )
+
+            enriched_offer = dict(offer)
+
+            enriched_offer.update(
+                {
+                    "review_confidence": confidence[
+                        "review_confidence"
+                    ],
+                    "review_confidence_score": confidence[
+                        "review_confidence_score"
+                    ],
+                    "review_confidence_known": confidence[
+                        "review_confidence_known"
+                    ],
+                }
+            )
+
+            enriched_offers.append(enriched_offer)
+
         exact = [
             offer
-            for offer in filtered_offers
+            for offer in enriched_offers
             if offer.get("status") == "exact"
         ]
 
         similar = [
             offer
-            for offer in filtered_offers
+            for offer in enriched_offers
             if offer.get("status") == "similar"
         ]
 
@@ -144,6 +171,17 @@ class DealEngine:
             "deal_quality": quality["deal_quality"],
             "deal_quality_score": quality["deal_quality_score"],
             "deal_quality_known": quality["deal_quality_known"],
+
+            "review_confidence": best_offer.get(
+                "review_confidence"
+            ),
+            "review_confidence_score": best_offer.get(
+                "review_confidence_score"
+            ),
+            "review_confidence_known": best_offer.get(
+                "review_confidence_known",
+                False,
+            ),
 
             "exact_count": candidates["exact_count"],
             "similar_count": candidates["similar_count"],
