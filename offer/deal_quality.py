@@ -4,7 +4,7 @@ from typing import Any
 
 
 class DealQuality:
-    """Формирует качество предложения по продавцу, отзывам и надёжности."""
+    """Формирует качество предложения с учётом полноты данных."""
 
     def calculate(
         self,
@@ -56,7 +56,12 @@ class DealQuality:
 
         score = sum(scores) / len(scores)
 
-        if score >= 0.8:
+        known_count = len(scores)
+
+        if known_count == 1:
+            quality = "unknown"
+
+        elif score >= 0.8:
             quality = "high"
 
         elif score >= 0.5:
@@ -68,5 +73,5 @@ class DealQuality:
         return {
             "deal_quality_score": score,
             "deal_quality": quality,
-            "deal_quality_known": True,
+            "deal_quality_known": known_count >= 2,
         }
