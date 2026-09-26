@@ -1,3 +1,4 @@
+import logging
 import os
 
 import telebot
@@ -7,6 +8,11 @@ from core import SavvyCore
 from core.models import (
     SavvyRequest,
     UserContext,
+)
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
 
