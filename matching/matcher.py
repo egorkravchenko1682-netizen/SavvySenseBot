@@ -765,6 +765,16 @@ class ProductMatcher:
         if requested == offered:
             return True
 
+        if attribute == "model":
+            # Модели — точные идентификаторы. "iPhone 15 Pro" и
+            # "iPhone 15 Pro Max" — РАЗНЫЕ товары, хотя один является
+            # текстовым префиксом другого. Общий подстрочный fallback
+            # ниже (`requested in offered`) считал бы это совпадением,
+            # из-за чего строгий матчер пропускал явный mismatch модели
+            # как EXACT. Для model разрешён только точный нормализованный
+            # матч — без alias/substring эвристик.
+            return False
+
         if attribute in {
             "category",
             "product_type",
