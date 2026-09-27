@@ -1,4 +1,7 @@
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class GlobalSearchEngine:
@@ -52,6 +55,16 @@ class GlobalSearchEngine:
                 "unknown",
             )
 
+            if not self._adapter_applies(adapter, region):
+
+                logger.info(
+                    "Search adapter %s: skipped (not relevant for region %s)",
+                    adapter_name,
+                    region,
+                )
+
+                continue
+
             try:
 
                 offers = adapter.search(
@@ -70,26 +83,47 @@ class GlobalSearchEngine:
                         offers
                     )
 
-                    print(
-                        f"Search adapter "
-                        f"{adapter_name}: "
-                        f"{len(offers)} results"
+                    logger.info(
+                        "Search adapter %s: %d results",
+                        adapter_name,
+                        len(offers),
                     )
 
                 else:
 
-                    print(
-                        f"Search adapter "
-                        f"{adapter_name}: "
-                        f"0 results"
+                    logger.info(
+                        "Search adapter %s: 0 results",
+                        adapter_name,
                     )
 
-            except Exception as error:
+            except Exception:
 
-                print(
-                    f"Search adapter "
-                    f"{adapter_name} "
-                    f"failed: {error}"
+                logger.warning(
+                    "Search adapter %s failed",
+                    adapter_name,
+                    exc_info=True,
                 )
 
         return all_offers
+
+    @staticmethod
+    def _adapter_applies(adapter: Any, region: str) -> bool:
+        """
+        Определяет, стоит ли опрашивать конкретный адаптер для
+        данного региона.
+
+        Маркетплейсы (Wildberries, Ozon, AliExpress и т.д.) обычно
+        актуальны только для части регионов — например, нет смысла
+        спрашивать Wildberries при поиске в регионе "CN". Адаптер
+        объявляет это через атрибут класса `supported_regions`
+        (набор кодов регионов). Если атрибут отсутствует или равен
+        `None` — адаптер считается универсальным (например,
+        DuckDuckGoAdapter или DemoAdapter) и опрашивается всегда.
+        """
+
+        supported_regions = getattr(adapter, "supported_regions", None)
+
+        if not supported_regions:
+            return True
+
+        return (region or "").upper() in supported_regions
