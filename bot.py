@@ -421,6 +421,10 @@ def handle_text(message):
 
         return
 
+    if response.intent == "gift":
+        _send_gift_suggestions(message.chat.id, response)
+        return
+
     # =========================
     # DATA
     # =========================
@@ -705,14 +709,7 @@ def handle_text(message):
     # DEAL ENGINE
     # =========================
 
-    counts = deal_analysis.get(
-        "counts",
-        {},
-    )
-
-    best_exact = deal_analysis.get(
-        "best_exact"
-    )
+    best_offer = deal_analysis.get("best_offer")
 
     lines.extend(
         [
@@ -722,37 +719,54 @@ def handle_text(message):
             "🧠 DEAL ENGINE",
 
             f"🎯 Exact matches: "
-            f"{counts.get('exact', 0)}",
+            f"{deal_analysis.get('exact_count', 0)}",
 
             f"🔄 Similar: "
-            f"{counts.get('similar', 0)}",
+            f"{deal_analysis.get('similar_count', 0)}",
 
             f"⚠️ Over budget: "
-            f"{counts.get('over_budget', 0)}",
+            f"{deal_analysis.get('over_budget_count', 0)}",
         ]
     )
 
-    # =========================
-    # BEST EXACT MATCH
-    # =========================
-
-    if best_exact:
-
-        best_product = (
-            best_exact.get(
-                "product",
-                {},
-            )
+    if response.data.get("regions_compared"):
+        lines.append(
+            "🌍 Регионы сравнения: "
+            + ", ".join(response.data["regions_compared"])
         )
 
+    # =========================
+    # BEST OFFER (с учётом доставки и пошлины, по всем регионам)
+    # =========================
+
+    if best_offer:
+
+        best_product = best_offer.get("product", {})
+
         best_currency = (
-            best_exact.get(
-                "total_currency"
-            )
-            or response.data.get(
-                "currency",
-                "USD",
-            )
+            best_offer.get("real_cost_currency")
+            or best_offer.get("currency")
+            or response.data.get("currency", "USD")
+        )
+
+        best_cost = (
+            best_offer.get("real_cost")
+            if best_offer.get("real_cost_known")
+            else best_offer.get("price")
+        )
+
+        cost_label = (
+            "💰 ИТОГО (с доставкой/пошлиной): "
+            if best_offer.get("real_cost_known")
+            else "💰 Цена (доставка/пошлина неизвестны): "
+        )
+
+        deal_label = {
+            "exact": "🏆 ЛУЧШЕЕ ТОЧНОЕ СОВПАДЕНИЕ",
+            "similar": "🏆 ЛУЧШИЙ ПОХОЖИЙ ВАРИАНТ",
+        }.get(
+            deal_analysis.get("deal_type"),
+            "🏆 ЛУЧШЕЕ ПРЕДЛОЖЕНИЕ",
         )
 
         lines.extend(
@@ -760,26 +774,33 @@ def handle_text(message):
 
                 "",
 
-                "🏆 BEST EXACT MATCH",
+                deal_label,
 
                 f"Товар: "
                 f"{best_product.get('title', '—')}",
 
                 f"🏪 Источник: "
-                f"{best_exact.get('source', '—')}",
+                f"{best_offer.get('source', '—')}",
 
-                f"💰 TOTAL COST: "
-                f"{format_money(
-                    best_exact.get(
-                        "total_cost"
-                    ),
-                    best_currency,
-                )}",
+                f"🌍 Регион: "
+                f"{best_offer.get('region', '—')}",
+
+                f"{cost_label}"
+                f"{format_money(best_cost, best_currency)}",
 
                 f"👤 Продавец: "
-                f"{best_exact.get('seller', '—')}",
+                f"{best_offer.get('seller', '—')}",
             ]
         )
+
+        if (
+            best_offer.get("region")
+            and best_offer.get("region") != response.data.get("region")
+        ):
+            lines.append(
+                "ℹ️ Это предложение из другого региона — "
+                "доставка/пошлина уже учтены в сумме выше."
+            )
 
     # =========================
     # OFFERS
@@ -797,26 +818,9 @@ def handle_text(message):
                 {},
             )
 
-            source_currency = (
-                offer.get(
-                    "currency",
-                    "USD",
-                )
-                or "USD"
-            )
-
-            total_currency = (
-                offer.get(
-                    "total_currency",
-                    response.data.get(
-                        "currency",
-                        "USD",
-                    ),
-                )
-                or response.data.get(
-                    "currency",
-                    "USD",
-                )
+            offer_currency = (
+                offer.get("currency")
+                or response.data.get("currency", "USD")
             )
 
             # =========================
@@ -847,6 +851,35 @@ def handle_text(message):
                 )
 
             # =========================
+            # COST BREAKDOWN LINES
+            # =========================
+
+            def _cost_line(field, label):
+                value = offer.get(field)
+                estimated = offer.get(f"{field}_estimated")
+                suffix = (
+                    " (оценка)"
+                    if estimated and value is not None
+                    else ""
+                )
+                return (
+                    f"{label}"
+                    f"{format_money(value, offer_currency)}"
+                    f"{suffix}"
+                )
+
+            if offer.get("real_cost_known"):
+                total_line = (
+                    f"💰 ИТОГО: "
+                    f"{format_money(offer.get('real_cost'), offer_currency)}"
+                )
+            else:
+                total_line = (
+                    "💰 ИТОГО: неизвестно "
+                    "(не все компоненты стоимости определены)"
+                )
+
+            # =========================
             # OFFER
             # =========================
 
@@ -868,40 +901,15 @@ def handle_text(message):
                     f"💰 Цена: "
                     f"{format_price(
                         offer.get('price'),
-                        source_currency,
+                        offer_currency,
                     )}",
 
-                    f"🚚 Доставка: "
-                    f"{format_money(
-                        offer.get('delivery'),
-                        source_currency,
-                    )}",
+                    _cost_line("delivery", "🚚 Доставка: "),
+                    _cost_line("taxes", "🧾 Налоги: "),
+                    _cost_line("duties", "📦 Пошлина: "),
+                    _cost_line("fees", "💳 Комиссии: "),
 
-                    f"🧾 Налоги: "
-                    f"{format_money(
-                        offer.get('taxes'),
-                        source_currency,
-                    )}",
-
-                    f"📦 Пошлины: "
-                    f"{format_money(
-                        offer.get('duties'),
-                        source_currency,
-                    )}",
-
-                    f"💳 Комиссии: "
-                    f"{format_money(
-                        offer.get('fees'),
-                        source_currency,
-                    )}",
-
-                    f"💰 TOTAL COST: "
-                    f"{format_money(
-                        offer.get(
-                            'total_cost'
-                        ),
-                        total_currency,
-                    )}",
+                    total_line,
 
                     f"👤 Продавец: "
                     f"{offer.get('seller', '—')}",
@@ -952,6 +960,107 @@ def handle_text(message):
         message.chat.id,
         final_message,
     )
+
+
+# =========================
+# GIFT RENDERING
+# =========================
+
+
+def _send_gift_suggestions(chat_id, response):
+    """
+    Форматирует ответ для intent == "gift" — подборку категорий
+    подарков вместо списка предложений одного товара (у подарка нет
+    единственного "правильного" товара для строгого сопоставления,
+    см. `gift.recommender.GiftRecommender`).
+    """
+
+    gift_request = response.data.get("gift_request", {})
+    suggestions = response.data.get("gift_suggestions", [])
+    currency = response.data.get("currency", "USD")
+
+    recipient_names = {
+        "girlfriend": "девушке",
+        "boyfriend": "парню",
+        "brother": "брату",
+        "sister": "сестре",
+        "mother": "маме",
+        "father": "папе",
+        "friend_female": "подруге",
+        "friend_male": "другу",
+        "colleague": "коллеге",
+        "child": "ребёнку",
+        "generic": "человеку",
+    }
+
+    recipient_label = recipient_names.get(
+        gift_request.get("recipient"),
+        "человеку",
+    )
+
+    lines = [f"🎁 ПОДБОРКА ПОДАРКОВ ({recipient_label})"]
+
+    budget = gift_request.get("budget")
+    if budget is not None:
+        lines.append(
+            f"💰 Бюджет: до {format_money(budget, currency)}"
+        )
+
+    if not suggestions:
+        lines.extend(
+            [
+                "",
+                "ℹ️ Не удалось подобрать подходящий вариант в "
+                "заданном бюджете — попробуйте увеличить бюджет "
+                "или уточнить получателя.",
+            ]
+        )
+        send_long_message(chat_id, "\n".join(lines))
+        return
+
+    for index, suggestion in enumerate(suggestions, start=1):
+        offer = suggestion.get("offer") or {}
+        product_data = offer.get("product", {})
+
+        offer_currency = offer.get("currency") or currency
+
+        cost = (
+            offer.get("real_cost")
+            if offer.get("real_cost_known")
+            else offer.get("price")
+        )
+
+        cost_label = (
+            "ИТОГО (с доставкой/пошлиной)"
+            if offer.get("real_cost_known")
+            else "Цена"
+        )
+
+        quality_score = suggestion.get("deal_quality_score")
+        quality_line = (
+            f"⭐ Оценка сделки: {quality_score * 100:.0f}/100"
+            if isinstance(quality_score, (int, float))
+            else None
+        )
+
+        lines.extend(
+            [
+                "",
+                f"{index}. {suggestion.get('category', '—').capitalize()}",
+                f"Товар: {product_data.get('title', '—')}",
+                f"🏪 Источник: {offer.get('source', '—')}",
+                f"🌍 Регион: {offer.get('region', '—')}",
+                f"💰 {cost_label}: {format_money(cost, offer_currency)}",
+            ]
+        )
+
+        if quality_line:
+            lines.append(quality_line)
+
+        if offer.get("url"):
+            lines.append(f"🔗 {offer.get('url')}")
+
+    send_long_message(chat_id, "\n".join(lines))
 
 
 # =========================
