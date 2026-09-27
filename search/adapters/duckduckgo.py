@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 from urllib.parse import (
     parse_qs,
@@ -7,6 +8,8 @@ from urllib.parse import (
 
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 class DuckDuckGoAdapter:
@@ -63,11 +66,12 @@ class DuckDuckGoAdapter:
                     currency=currency,
                 )
 
-            except Exception as error:
+            except Exception:
 
-                print(
-                    f"DuckDuckGo query failed: "
-                    f"{query} | {error}"
+                logger.warning(
+                    "DuckDuckGo query failed: %s",
+                    query,
+                    exc_info=True,
                 )
 
                 continue
