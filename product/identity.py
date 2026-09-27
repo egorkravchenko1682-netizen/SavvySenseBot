@@ -340,6 +340,12 @@ def _extract_budget(
             r"(?:byn|белорусских\s+рублей)\b",
             "BYN",
         ),
+        (
+            # Разговорное "200р" / "200 р." как рубли — не только
+            # полное "руб(лей/ля)", которое уже покрыто выше.
+            r"\b(\d+(?:[.,]\d+)?)\s*р\.?\b",
+            "RUB",
+        ),
     ]
 
     for pattern, currency in currency_patterns:
@@ -390,3 +396,8 @@ def _extract_budget(
             return value, currency
 
     return None, None
+
+
+# Публичный алиас: другим модулям (например `gift.profile`) удобнее
+# импортировать понятное имя, чем "приватную" `_extract_budget`.
+extract_budget = _extract_budget
