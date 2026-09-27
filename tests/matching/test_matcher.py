@@ -261,7 +261,7 @@ def test_color_aliases_match():
 
     request[
         "required_attributes"
-    ]["color"] = "чёрный"
+    ]["color"] = "ÑÑÑÐ½ÑÐ¹"
 
     offer = iphone_offer(
         color="black"
