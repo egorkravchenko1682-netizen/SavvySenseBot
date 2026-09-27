@@ -13,7 +13,22 @@ class BudgetFilter:
         budget_currency: str | None,
     ) -> dict[str, Any]:
 
-        if budget is None or not budget_currency:
+        if budget is None:
+            # Пользователь не назвал бюджет — это отсутствие
+            # ограничения, а НЕ "неизвестно, укладывается ли".
+            # Раньше это приводило к тому, что DealEngine отбрасывал
+            # вообще все предложения на запрос без явного бюджета
+            # (что является подавляющим большинством запросов).
+            return {
+                "within_budget": True,
+                "budget_known": False,
+                "budget_value": None,
+                "budget_currency": None,
+                "offer_value": None,
+                "offer_currency": None,
+            }
+
+        if not budget_currency:
             return self._unknown()
 
         value, currency = self._get_value(offer)
