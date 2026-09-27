@@ -1977,39 +1977,3 @@ class OfferExtractor:
                 fallback.get(
                     "seller"
                 ),
-
-            "availability":
-                fallback.get(
-                    "availability",
-                    "unknown",
-                ),
-
-            "sku":
-                fallback.get(
-                    "sku"
-                ),
-
-            "mpn":
-                fallback.get(
-                    "mpn"
-                ),
-
-            "gtin":
-                fallback.get(
-                    "gtin"
-                ),
-
-            "url":
-                url
-                or fallback.get(
-                    "url"
-                ),
-
-            "domain":
-                fallback.get(
-                    "domain"
-                ),
-
-            "extracted":
-                False,
-        }
