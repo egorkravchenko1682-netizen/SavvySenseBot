@@ -21,7 +21,7 @@ class OfferExtractor:
     """
     Универсальный extractor товарных страниц SAVVY SENSE.
 
-    Архитектура:
+    Pipeline:
 
         HTML
           ↓
@@ -36,17 +36,11 @@ class OfferExtractor:
           ↓
         единый OfferExtractor result
 
-    Публичный контракт:
-
-        extract(url, fallback) -> dict
-
-    Важный принцип:
-
-        UNKNOWN != 0
+    UNKNOWN != 0
 
     Если стоимость доставки, налогов,
     пошлин или комиссий не найдена,
-    она остаётся None.
+    значение остаётся None.
     """
 
     name = "offer_extractor"
@@ -99,7 +93,6 @@ class OfferExtractor:
             )
 
         try:
-
             response = requests.get(
                 url,
                 headers=self._headers(),
@@ -139,15 +132,21 @@ class OfferExtractor:
             )
 
             # =================================================
+            # PAGE TEXT
+            # =================================================
+
+            page_text = self._page_text(
+                soup
+            )
+
+            # =================================================
             # PRODUCT
             # =================================================
 
             product_extracted = (
                 self.product_extractor.extract(
                     data=product_data,
-                    text=self._page_text(
-                        soup
-                    ),
+                    text=page_text,
                 )
             )
 
@@ -236,14 +235,6 @@ class OfferExtractor:
             )
 
             # =================================================
-            # PAGE TEXT
-            # =================================================
-
-            page_text = self._page_text(
-                soup
-            )
-
-            # =================================================
             # ATTRIBUTES
             # =================================================
 
@@ -269,11 +260,9 @@ class OfferExtractor:
                 fallback_attributes,
                 dict,
             ):
-
                 for key, value in (
                     fallback_attributes.items()
                 ):
-
                     if (
                         key not in attributes
                         and value is not None
@@ -300,18 +289,11 @@ class OfferExtractor:
             )
 
             if price is None:
-
-                meta_price = (
-                    self._extract_meta_price(
-                        soup
-                    )
+                price = self._extract_meta_price(
+                    soup
                 )
 
-                if meta_price is not None:
-                    price = meta_price
-
             if price is None:
-
                 price = (
                     self._clean_numeric_price(
                         fallback.get(
@@ -339,7 +321,6 @@ class OfferExtractor:
             )
 
             if currency:
-
                 currency = str(
                     currency
                 ).upper()
@@ -351,10 +332,8 @@ class OfferExtractor:
             condition = (
                 self.condition_extractor.extract(
                     data={
-                        "product":
-                            product_data,
-                        "offer":
-                            offer_data,
+                        "product": product_data,
+                        "offer": offer_data,
                     },
                     text=(
                         f"{title or ''} "
@@ -370,7 +349,6 @@ class OfferExtractor:
                     "condition"
                 )
             ):
-
                 condition = self._clean(
                     fallback.get(
                         "condition"
@@ -388,10 +366,8 @@ class OfferExtractor:
             availability = (
                 self.availability_extractor.extract(
                     data={
-                        "product":
-                            product_data,
-                        "offer":
-                            offer_data,
+                        "product": product_data,
+                        "offer": offer_data,
                     },
                     text=(
                         f"{title or ''} "
@@ -407,7 +383,6 @@ class OfferExtractor:
                     "availability"
                 )
             ):
-
                 availability = self._clean(
                     fallback.get(
                         "availability"
@@ -415,7 +390,7 @@ class OfferExtractor:
                 )
 
             # =================================================
-            # COST COMPONENTS
+            # COST
             # =================================================
 
             cost_data = (
@@ -491,14 +466,12 @@ class OfferExtractor:
             )
 
             if not image:
-
                 image = self._meta(
                     soup,
                     "og:image",
                 )
 
             if not image:
-
                 image = self._clean(
                     fallback.get(
                         "image"
@@ -551,10 +524,6 @@ class OfferExtractor:
                 "price": price,
                 "currency": currency,
 
-                # -------------------------------------------------
-                # REAL COST COMPONENTS
-                # -------------------------------------------------
-
                 "delivery":
                     cost_data["delivery"],
 
@@ -602,7 +571,6 @@ class OfferExtractor:
             }
 
         except Exception as error:
-
             print(
                 f"Offer extraction failed "
                 f"for {url}: {error}"
@@ -618,8 +586,7 @@ class OfferExtractor:
     # =========================================================
 
     @staticmethod
-    def _headers():
-
+    def _headers() -> dict[str, str]:
         return {
             "User-Agent": (
                 "Mozilla/5.0 "
@@ -628,16 +595,13 @@ class OfferExtractor:
                 "(KHTML, like Gecko) "
                 "Chrome/126.0 Safari/537.36"
             ),
-
             "Accept-Language":
                 "en-US,en;q=0.9",
-
             "Accept":
                 "text/html,"
                 "application/xhtml+xml,"
                 "application/xml;q=0.9,"
                 "*/*;q=0.8",
-
             "Cache-Control":
                 "no-cache",
         }
@@ -652,7 +616,6 @@ class OfferExtractor:
     ) -> dict[str, Any]:
 
         for item in data:
-
             found = (
                 self._find_product_recursive(
                     item
@@ -673,7 +636,6 @@ class OfferExtractor:
             item,
             dict,
         ):
-
             item_type = item.get(
                 "@type"
             )
@@ -682,14 +644,11 @@ class OfferExtractor:
                 item_type,
                 list,
             ):
-
                 types = [
                     str(value).lower()
                     for value in item_type
                 ]
-
             else:
-
                 types = [
                     str(
                         item_type
@@ -706,7 +665,6 @@ class OfferExtractor:
                     for value in types
                 )
             ):
-
                 return item
 
             graph = item.get(
@@ -717,9 +675,7 @@ class OfferExtractor:
                 graph,
                 list,
             ):
-
                 for child in graph:
-
                     found = (
                         self._find_product_recursive(
                             child
@@ -735,13 +691,11 @@ class OfferExtractor:
                 "item",
                 "subjectOf",
             ):
-
                 nested = item.get(
                     key
                 )
 
                 if nested is not None:
-
                     found = (
                         self._find_product_recursive(
                             nested
@@ -752,7 +706,6 @@ class OfferExtractor:
                         return found
 
             for value in item.values():
-
                 if isinstance(
                     value,
                     (
@@ -760,7 +713,6 @@ class OfferExtractor:
                         list,
                     ),
                 ):
-
                     found = (
                         self._find_product_recursive(
                             value
@@ -774,9 +726,7 @@ class OfferExtractor:
             item,
             list,
         ):
-
             for child in item:
-
                 found = (
                     self._find_product_recursive(
                         child
@@ -805,16 +755,13 @@ class OfferExtractor:
             offers,
             dict,
         ):
-
             return offers
 
         if isinstance(
             offers,
             list,
         ):
-
             for offer in offers:
-
                 if not isinstance(
                     offer,
                     dict,
@@ -829,16 +776,13 @@ class OfferExtractor:
                         "lowPrice"
                     ) is not None
                 ):
-
                     return offer
 
             for offer in offers:
-
                 if isinstance(
                     offer,
                     dict,
                 ):
-
                     return offer
 
         return {}
@@ -854,19 +798,6 @@ class OfferExtractor:
         soup: BeautifulSoup,
         fallback: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Извлекает компоненты реальной стоимости.
-
-        Источники в порядке доверия:
-
-        1. Structured Offer
-        2. Structured Product
-        3. Meta / HTML
-        4. fallback
-
-        Никакие неизвестные значения
-        не превращаются в 0.
-        """
 
         delivery = None
         taxes = None
@@ -891,27 +822,25 @@ class OfferExtractor:
             delivery_source = "structured"
 
         if delivery is None:
-
-            delivery = (
-                self._extract_meta_cost(
-                    soup,
-                    (
-                        "shipping:amount",
-                        "shipping_amount",
-                        "delivery:amount",
-                        "delivery_amount",
-                    ),
-                )
+            delivery = self._extract_meta_cost(
+                soup,
+                (
+                    "shipping:amount",
+                    "shipping_amount",
+                    "delivery:amount",
+                    "delivery_amount",
+                ),
             )
 
             if delivery is not None:
                 delivery_source = "meta"
 
         if delivery is None:
-
-            delivery = self._clean_numeric_price(
-                fallback.get(
-                    "delivery"
+            delivery = (
+                self._clean_numeric_price(
+                    fallback.get(
+                        "delivery"
+                    )
                 )
             )
 
@@ -937,7 +866,6 @@ class OfferExtractor:
             taxes_source = "structured"
 
         if taxes is None:
-
             taxes = self._extract_numeric_field(
                 product,
                 (
@@ -953,10 +881,11 @@ class OfferExtractor:
                 taxes_source = "structured"
 
         if taxes is None:
-
-            taxes = self._clean_numeric_price(
-                fallback.get(
-                    "taxes"
+            taxes = (
+                self._clean_numeric_price(
+                    fallback.get(
+                        "taxes"
+                    )
                 )
             )
 
@@ -982,7 +911,6 @@ class OfferExtractor:
             duties_source = "structured"
 
         if duties is None:
-
             duties = self._extract_numeric_field(
                 product,
                 (
@@ -998,10 +926,11 @@ class OfferExtractor:
                 duties_source = "structured"
 
         if duties is None:
-
-            duties = self._clean_numeric_price(
-                fallback.get(
-                    "duties"
+            duties = (
+                self._clean_numeric_price(
+                    fallback.get(
+                        "duties"
+                    )
                 )
             )
 
@@ -1028,7 +957,6 @@ class OfferExtractor:
             fees_source = "structured"
 
         if fees is None:
-
             fees = self._extract_numeric_field(
                 product,
                 (
@@ -1045,10 +973,11 @@ class OfferExtractor:
                 fees_source = "structured"
 
         if fees is None:
-
-            fees = self._clean_numeric_price(
-                fallback.get(
-                    "fees"
+            fees = (
+                self._clean_numeric_price(
+                    fallback.get(
+                        "fees"
+                    )
                 )
             )
 
@@ -1093,17 +1022,6 @@ class OfferExtractor:
         offer: dict[str, Any],
         product: dict[str, Any],
     ) -> float | None:
-        """
-        Извлекает стоимость доставки
-        из Schema.org / JSON-LD.
-
-        Поддерживает распространённые варианты:
-
-            shippingDetails
-            shippingRate
-            shipping
-            delivery
-        """
 
         candidates = [
             offer.get(
@@ -1127,7 +1045,6 @@ class OfferExtractor:
         ]
 
         for candidate in candidates:
-
             value = (
                 self._extract_shipping_value(
                     candidate
@@ -1154,14 +1071,12 @@ class OfferExtractor:
                 float,
             ),
         ):
-
             return float(value)
 
         if isinstance(
             value,
             str,
         ):
-
             return self._clean_numeric_price(
                 value
             )
@@ -1170,9 +1085,7 @@ class OfferExtractor:
             value,
             list,
         ):
-
             for item in value:
-
                 result = (
                     self._extract_shipping_value(
                         item
@@ -1188,16 +1101,6 @@ class OfferExtractor:
             value,
             dict,
         ):
-
-            # Schema.org:
-            #
-            # shippingDetails:
-            # {
-            #   shippingRate: {
-            #       value: 10
-            #   }
-            # }
-
             for key in (
                 "shippingRate",
                 "price",
@@ -1205,7 +1108,6 @@ class OfferExtractor:
                 "amount",
                 "cost",
             ):
-
                 nested = value.get(
                     key
                 )
@@ -1222,15 +1124,11 @@ class OfferExtractor:
                 if result is not None:
                     return result
 
-            # Некоторые сайты используют
-            # priceSpecification.
-
             specification = value.get(
                 "priceSpecification"
             )
 
             if specification is not None:
-
                 result = (
                     self._extract_shipping_value(
                         specification
@@ -1255,7 +1153,6 @@ class OfferExtractor:
             return None
 
         for key in keys:
-
             value = data.get(
                 key
             )
@@ -1267,19 +1164,16 @@ class OfferExtractor:
                 value,
                 dict,
             ):
-
                 for nested_key in (
                     "value",
                     "amount",
                     "price",
                 ):
-
                     nested = value.get(
                         nested_key
                     )
 
                     if nested is not None:
-
                         result = (
                             OfferExtractor
                             ._clean_numeric_price(
@@ -1311,7 +1205,6 @@ class OfferExtractor:
     ) -> float | None:
 
         for candidate in candidates:
-
             value = (
                 OfferExtractor._meta(
                     soup,
@@ -1335,7 +1228,7 @@ class OfferExtractor:
         return None
 
     # =========================================================
-    # PRICE FALLBACK
+    # PRICE
     # =========================================================
 
     def _extract_meta_price(
@@ -1351,7 +1244,6 @@ class OfferExtractor:
         )
 
         for candidate in candidates:
-
             value = self._meta(
                 soup,
                 candidate,
@@ -1373,7 +1265,6 @@ class OfferExtractor:
         )
 
         if element:
-
             value = (
                 element.get(
                     "content"
@@ -1415,10 +1306,7 @@ class OfferExtractor:
                 float,
             ),
         ):
-
-            return float(
-                value
-            )
+            return float(value)
 
         text = str(
             value
@@ -1443,20 +1331,16 @@ class OfferExtractor:
             "," in text
             and "." in text
         ):
-
             if (
                 text.rfind(",")
                 <
                 text.rfind(".")
             ):
-
                 text = text.replace(
                     ",",
                     "",
                 )
-
             else:
-
                 text = (
                     text
                     .replace(
@@ -1470,22 +1354,18 @@ class OfferExtractor:
                 )
 
         elif "," in text:
-
             parts = text.split(",")
 
             if (
                 len(parts) == 2
                 and len(parts[1]) <= 2
             ):
-
                 text = (
                     parts[0]
                     + "."
                     + parts[1]
                 )
-
             else:
-
                 text = text.replace(
                     ",",
                     "",
@@ -1500,16 +1380,13 @@ class OfferExtractor:
             return None
 
         try:
-
             return float(
                 match.group(0)
             )
-
         except (
             TypeError,
             ValueError,
         ):
-
             return None
 
     # =========================================================
@@ -1529,7 +1406,6 @@ class OfferExtractor:
             seller,
             dict,
         ):
-
             return self._clean(
                 seller.get(
                     "name"
@@ -1552,7 +1428,6 @@ class OfferExtractor:
         if domain.startswith(
             "www."
         ):
-
             domain = domain[4:]
 
         return domain or None
@@ -1574,7 +1449,6 @@ class OfferExtractor:
             image,
             list,
         ):
-
             if not image:
                 return None
 
@@ -1584,7 +1458,6 @@ class OfferExtractor:
                 first,
                 dict,
             ):
-
                 return (
                     first.get(
                         "url"
@@ -1602,7 +1475,6 @@ class OfferExtractor:
             image,
             dict,
         ):
-
             return (
                 image.get(
                     "url"
@@ -1635,7 +1507,6 @@ class OfferExtractor:
         )
 
         if not element:
-
             element = soup.find(
                 "meta",
                 attrs={
@@ -1663,14 +1534,12 @@ class OfferExtractor:
         )
 
         for candidate in candidates:
-
             value = self._meta(
                 soup,
                 candidate,
             )
 
             if value:
-
                 return (
                     str(value)
                     .strip()
@@ -1685,7 +1554,6 @@ class OfferExtractor:
         )
 
         if element:
-
             value = (
                 element.get(
                     "content"
@@ -1696,7 +1564,6 @@ class OfferExtractor:
             )
 
             if value:
-
                 return (
                     str(value)
                     .strip()
@@ -1721,7 +1588,6 @@ class OfferExtractor:
                 "noscript",
             ]
         ):
-
             element.decompose()
 
         text = soup.get_text(
@@ -1751,7 +1617,6 @@ class OfferExtractor:
             value,
             str,
         ):
-
             value = (
                 value
                 .replace(
@@ -1786,7 +1651,6 @@ class OfferExtractor:
             attributes,
             dict,
         ):
-
             attributes = {}
 
         condition = (
@@ -1834,6 +1698,20 @@ class OfferExtractor:
                 )
             )
         )
+
+        fallback_url = (
+            url
+            or fallback.get(
+                "url"
+            )
+        )
+
+        domain = None
+
+        if fallback_url:
+            domain = urlparse(
+                str(fallback_url)
+            ).netloc
 
         return {
             "title":
@@ -1977,3 +1855,34 @@ class OfferExtractor:
                 fallback.get(
                     "seller"
                 ),
+
+            "availability":
+                fallback.get(
+                    "availability"
+                )
+                or "unknown",
+
+            "sku":
+                fallback.get(
+                    "sku"
+                ),
+
+            "mpn":
+                fallback.get(
+                    "mpn"
+                ),
+
+            "gtin":
+                fallback.get(
+                    "gtin"
+                ),
+
+            "url":
+                fallback_url,
+
+            "domain":
+                domain,
+
+            "extracted":
+                False,
+        }
