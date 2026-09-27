@@ -601,11 +601,13 @@ class ProductExtractor:
                 result[key] = None
 
         if result.get("brand"):
-            result["brand"] = (
-                result["brand"]
-                .lower()
-                .strip()
-            )
+            # Раньше здесь принудительно приводили brand к нижнему
+            # регистру ("Apple" -> "apple"), что портило отображение
+            # бренда пользователю и не давало никакой пользы для
+            # сопоставления: ProductMatcher уже нормализует регистр
+            # самостоятельно при сравнении (см. matching/matcher.py
+            # `_normalize`). Сохраняем оригинальный регистр.
+            result["brand"] = result["brand"].strip()
 
         if result.get("gtin"):
             result["gtin"] = (
