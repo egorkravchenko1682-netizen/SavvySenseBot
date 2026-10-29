@@ -261,7 +261,6 @@ def format_price(
     commands=["start"]
 )
 def start_command(message):
-    reply_markup = None
     instructions = (
         "🧠 SAVVY SENSE\n\n"
         "Найду подходящие предложения и помогу выбрать лучший вариант.\n\n"
@@ -269,25 +268,26 @@ def start_command(message):
     )
 
     if WEBAPP_URL:
-        reply_markup = InlineKeyboardMarkup()
-        reply_markup.add(InlineKeyboardButton(
+        app_button = InlineKeyboardMarkup()
+        app_button.add(InlineKeyboardButton(
             text="✨ SavvyApp",
             web_app=WebAppInfo(url=WEBAPP_URL),
         ))
-        instructions += "\n\nНажми кнопку, чтобы начать."
         # Remove the old reply-keyboard launcher: Telegram leaves it visible
         # across deploys, and that launch mode does not provide authenticated initData.
         bot.send_message(
             message.chat.id,
-            "Обновил запуск SAVVY — используй кнопку ✨ SavvyApp ниже или в меню чата.",
+            instructions,
             reply_markup=ReplyKeyboardRemove(),
         )
+        bot.send_message(
+            message.chat.id,
+            "Открой поиск и сравнение товаров:",
+            reply_markup=app_button,
+        )
+        return
 
-    bot.send_message(
-        message.chat.id,
-        instructions,
-        reply_markup=reply_markup,
-    )
+    bot.send_message(message.chat.id, instructions)
 
 
 def _miniapp_search(user_id, payload):
