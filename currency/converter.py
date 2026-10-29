@@ -34,6 +34,8 @@ class CurrencyConverter:
             "AZN": 0.59,
             "MDL": 0.056,
             "KGS": 0.011,
+            # Rounded indicative rate; it is not a live quote.
+            "TJS": 0.1085,
         }
 
     def normalize_currency(
@@ -73,6 +75,7 @@ class CurrencyConverter:
             "AZN": "AZN",
             "MDL": "MDL",
             "KGS": "KGS",
+            "TJS": "TJS",
         }
 
         return aliases.get(value, value)

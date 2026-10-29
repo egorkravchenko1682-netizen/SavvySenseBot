@@ -12,7 +12,6 @@ from product.dna import build_product_dna
 from product.query import build_search_plan
 
 from search.engine import GlobalSearchEngine
-from search.adapters.demo import DemoAdapter
 from search.adapters.duckduckgo import DuckDuckGoAdapter
 
 from marketplaces.wildberries import WildberriesAdapter
@@ -81,7 +80,6 @@ class SavvyCore:
 
         self.search_engine = search_engine or GlobalSearchEngine(
             adapters=[
-                DemoAdapter(),
                 WildberriesAdapter(),
                 OzonAdapter(),
                 EbayAdapter(),

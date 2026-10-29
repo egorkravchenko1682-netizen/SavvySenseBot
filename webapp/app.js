@@ -4,8 +4,8 @@ const telegram = window.Telegram && window.Telegram.WebApp;
 if (telegram) {
   telegram.ready();
   telegram.expand();
-  telegram.setHeaderColor("#f5f4ef");
-  telegram.setBackgroundColor("#f5f4ef");
+  telegram.setHeaderColor("#090b0d");
+  telegram.setBackgroundColor("#090b0d");
 }
 
 const translations = {
@@ -13,9 +13,9 @@ const translations = {
     locale: "ru-RU", pageTitle: "SavvyApp — найди лучший вариант", homeAria: "SAVVY — главная", promisesAria: "Что SAVVY проверяет", beta: "ранний доступ", heroEyebrow: "ПОИСК ПЕРЕД ПОКУПКОЙ", heroTitle: "Сравни, прежде чем купить.",
     heroDescription: "Укажи товар и страну доставки. SAVVY поищет предложения в нескольких регионах.", sectionEyebrow: "ВАША СЛЕДУЮЩАЯ ПОКУПКА",
     formTitle: "Что хотите найти?", productName: "Название товара", placeholder: "Например, футболка Nike Air Max", paste: "Вставить",
-    fieldHint: "Напиши модель и важные детали — покажем лучший найденный вариант.", shipTo: "Куда доставлять?", searchButton: "Найти лучший вариант",
+    fieldHint: "Напиши модель и важные детали — покажем лучший найденный вариант.", shipTo: "Куда доставлять?", displayCurrency: "Валюта отображения", searchButton: "Найти лучший вариант",
     searching: "Ищем лучший вариант…", searchingHint: "Сравниваем совпадения, цены и известные расходы. Это может занять до минуты.",
-    trustNote: "Часть площадок работает нестабильно. Стоимость доставки и пошлин иногда оценивается, а не подтверждается продавцом.",
+    trustNote: "Часть площадок работает нестабильно. Доставка и пошлины могут быть оценочными; курсы валют пока ориентировочные — итог перепроверь у продавца.",
     privacyNote: "Название и выбранная страна отправляются Telegram-боту и поисковым площадкам. Mini App не сохраняет их в базе.",
     resultsEyebrow: "РЕЗУЛЬТАТ ПОИСКА", resultsTitle: "Лучший вариант", newSearch: "Новый поиск", promiseCost: "Итоговая стоимость",
     promiseSeller: "Надёжность продавца", promiseMatch: "Совпадение товара", footerSlogan: "Покупай осознанно.",
@@ -31,16 +31,16 @@ const translations = {
     pasteFailed: "Не удалось прочитать буфер обмена. Вставь текст вручную.", clipboardEmpty: "Буфер обмена пуст.", tooShort: "Напиши название товара — хотя бы два символа.",
     linksUnsupported: "Пока поиск работает по названию, а не по ссылке.", openTelegram: "Открой приложение кнопкой ✨ SavvyApp в сообщении бота или в меню чата.",
     noAlternatives: "Других вариантов пока нет", searchError: "Не удалось выполнить поиск. Попробуй ещё раз.", rateLimited: "Слишком много запросов. Попробуй через минуту.", invalidSearch: "Проверь название товара и страну доставки.",
-    regionNames: { BY: "Беларусь", RU: "Россия", KZ: "Казахстан", UZ: "Узбекистан", KG: "Кыргызстан", AM: "Армения", AZ: "Азербайджан", MD: "Молдова" },
+    regionNames: { BY: "Беларусь", RU: "Россия", KZ: "Казахстан", UZ: "Узбекистан", KG: "Кыргызстан", AM: "Армения", AZ: "Азербайджан", MD: "Молдова", TJ: "Таджикистан" },
     attributes: { brand: "бренд", model: "модель", color: "цвет", size: "размер", storage: "память", material: "материал", category: "категория", condition: "состояние" },
   },
   en: {
     locale: "en-US", pageTitle: "SavvyApp — find the best option", homeAria: "SAVVY — home", promisesAria: "What SAVVY checks", beta: "early access", heroEyebrow: "SEARCH BEFORE YOU BUY", heroTitle: "Compare before you buy.",
     heroDescription: "Choose an item and delivery country. SAVVY searches offers across supported regions.", sectionEyebrow: "YOUR NEXT PURCHASE",
     formTitle: "What are you looking for?", productName: "Product name", placeholder: "For example, Nike Air Max T-shirt", paste: "Paste",
-    fieldHint: "Add the model and key details to find the best available match.", shipTo: "Deliver to", searchButton: "Find the best option",
+    fieldHint: "Add the model and key details to find the best available match.", shipTo: "Deliver to", displayCurrency: "Display currency", searchButton: "Find the best option",
     searching: "Finding the best option…", searchingHint: "Comparing matches, prices, and known costs. This may take up to a minute.",
-    trustNote: "Some marketplaces can be unreliable. Shipping and duties may be estimates rather than seller-confirmed amounts.",
+    trustNote: "Some marketplaces can be unreliable. Shipping and duties may be estimates; exchange rates are indicative, so confirm the final price with the seller.",
     privacyNote: "Your query and delivery country are sent to the bot and search providers. The Mini App does not store them in a database.",
     resultsEyebrow: "SEARCH RESULTS", resultsTitle: "Best option", newSearch: "New search", promiseCost: "Total cost",
     promiseSeller: "Seller reliability", promiseMatch: "Product match", footerSlogan: "Shop with confidence.",
@@ -56,16 +56,16 @@ const translations = {
     pasteFailed: "Could not read the clipboard. Paste the text manually.", clipboardEmpty: "The clipboard is empty.", tooShort: "Enter a product name with at least two characters.",
     linksUnsupported: "Search by product name is available; link checks are not yet supported.", openTelegram: "Open the app using ✨ SavvyApp in the bot message or chat menu.",
     noAlternatives: "No other options yet", searchError: "Search failed. Please try again.", rateLimited: "Too many searches. Please try again in a minute.", invalidSearch: "Check the product name and delivery country.",
-    regionNames: { BY: "Belarus", RU: "Russia", KZ: "Kazakhstan", UZ: "Uzbekistan", KG: "Kyrgyzstan", AM: "Armenia", AZ: "Azerbaijan", MD: "Moldova" },
+    regionNames: { BY: "Belarus", RU: "Russia", KZ: "Kazakhstan", UZ: "Uzbekistan", KG: "Kyrgyzstan", AM: "Armenia", AZ: "Azerbaijan", MD: "Moldova", TJ: "Tajikistan" },
     attributes: { brand: "brand", model: "model", color: "color", size: "size", storage: "storage", material: "material", category: "category", condition: "condition" },
   },
   be: {
     locale: "be-BY", pageTitle: "SavvyApp — знайдзі найлепшы варыянт", homeAria: "SAVVY — галоўная", promisesAria: "Што правярае SAVVY", beta: "ранні доступ", heroEyebrow: "ПОШУК ПЕРАД ПАКУПКАЙ", heroTitle: "Параўнай, перш чым купіць.",
     heroDescription: "Абяры тавар і краіну дастаўкі. SAVVY шукае прапановы ў даступных рэгіёнах.", sectionEyebrow: "ВАША НАСТУПНАЯ ПАКУПКА",
     formTitle: "Што шукаем?", productName: "Назва тавару", placeholder: "Напрыклад, футболка Nike Air Max", paste: "Уставіць",
-    fieldHint: "Дадай мадэль і важныя дэталі, каб знайсці найлепшы варыянт.", shipTo: "Куды даставіць?", searchButton: "Знайсці найлепшы варыянт",
+    fieldHint: "Дадай мадэль і важныя дэталі, каб знайсці найлепшы варыянт.", shipTo: "Куды даставіць?", displayCurrency: "Валюта адлюстравання", searchButton: "Знайсці найлепшы варыянт",
     searching: "Шукаем найлепшы варыянт…", searchingHint: "Параўноўваем супадзенні, цэны і вядомыя выдаткі. Гэта можа заняць да хвіліны.",
-    trustNote: "Некаторыя пляцоўкі працуюць нестабільна. Кошт дастаўкі і пошлін можа быць ацэначным, а не пацверджаным прадаўцом.",
+    trustNote: "Некаторыя пляцоўкі працуюць нестабільна. Дастаўка і пошліны могуць быць ацэначнымі; курсы валют пакуль арыенціровачныя — правер выніковую цану ў прадаўца.",
     privacyNote: "Запыт і краіна дастаўкі перадаюцца боту і пошукавым пляцоўкам. Mini App не захоўвае іх у базе.",
     resultsEyebrow: "ВЫНІКІ ПОШУКУ", resultsTitle: "Найлепшы варыянт", newSearch: "Новы пошук", promiseCost: "Поўны кошт",
     promiseSeller: "Надзейнасць прадаўца", promiseMatch: "Супадзенне тавару", footerSlogan: "Купляй свядома.",
@@ -81,7 +81,7 @@ const translations = {
     pasteFailed: "Не ўдалося прачытаць буфер абмену. Устаў тэкст уручную.", clipboardEmpty: "Буфер абмену пусты.", tooShort: "Увядзі назву тавару — не менш за два сімвалы.",
     linksUnsupported: "Пакуль пошук працуе па назве тавару, а не па спасылцы.", openTelegram: "Адкрый праграму кнопкай ✨ SavvyApp у паведамленні бота або ў меню чата.",
     noAlternatives: "Іншых варыянтаў пакуль няма", searchError: "Не ўдалося выканаць пошук. Паспрабуй яшчэ раз.", rateLimited: "Занадта шмат запытаў. Паспрабуй праз хвіліну.", invalidSearch: "Правер назву тавару і краіну дастаўкі.",
-    regionNames: { BY: "Беларусь", RU: "Расія", KZ: "Казахстан", UZ: "Узбекістан", KG: "Кыргызстан", AM: "Арменія", AZ: "Азербайджан", MD: "Малдова" },
+    regionNames: { BY: "Беларусь", RU: "Расія", KZ: "Казахстан", UZ: "Узбекістан", KG: "Кыргызстан", AM: "Арменія", AZ: "Азербайджан", MD: "Малдова", TJ: "Таджыкістан" },
     attributes: { brand: "брэнд", model: "мадэль", color: "колер", size: "памер", storage: "памяць", material: "матэрыял", category: "катэгорыя", condition: "стан" },
   },
 };
@@ -108,7 +108,31 @@ try {
   // The app still works when browser storage is disabled.
 }
 const languageSelect = document.querySelector("#language");
+const currencySelect = document.querySelector("#currency");
+const regionSelect = document.querySelector("#region");
 let currentResult = null;
+const regionCurrencies = { BY: "BYN", RU: "RUB", KZ: "KZT", UZ: "UZS", KG: "KGS", AM: "AMD", AZ: "AZN", MD: "MDL", TJ: "TJS" };
+const regionLanguages = { BY: ["ru", "be", "en"], RU: ["ru", "en"], KZ: ["ru", "en"], UZ: ["ru", "en"], KG: ["ru", "en"], AM: ["ru", "en"], AZ: ["ru", "en"], MD: ["ru", "en"], TJ: ["ru", "en"] };
+try {
+  const savedCurrency = localStorage.getItem("savvy.currency");
+  const savedRegion = localStorage.getItem("savvy.region");
+  if (savedRegion && regionCurrencies[savedRegion]) regionSelect.value = savedRegion;
+  if (savedCurrency && [...currencySelect.options].some((option) => option.value === savedCurrency)) currencySelect.value = savedCurrency;
+  else currencySelect.value = regionCurrencies[regionSelect.value] || "USD";
+} catch {
+  currencySelect.value = regionCurrencies[regionSelect.value] || "USD";
+}
+regionSelect.addEventListener("change", () => {
+  currencySelect.value = regionCurrencies[regionSelect.value] || "USD";
+  syncLanguageOptions();
+  try {
+    localStorage.setItem("savvy.region", regionSelect.value);
+    localStorage.setItem("savvy.currency", currencySelect.value);
+  } catch { /* Preferences stay available for this session. */ }
+});
+currencySelect.addEventListener("change", () => {
+  try { localStorage.setItem("savvy.currency", currencySelect.value); } catch { /* Current selection still works. */ }
+});
 
 function t(key) {
   return translations[language][key] || translations.ru[key] || key;
@@ -143,7 +167,14 @@ function setLanguage(nextLanguage) {
   if (!results.hidden && currentResult) renderResult(currentResult);
 }
 
+function syncLanguageOptions() {
+  const available = regionLanguages[regionSelect.value] || ["en"];
+  [...languageSelect.options].forEach((option) => { option.hidden = !available.includes(option.value); });
+  if (!available.includes(language)) setLanguage(available[0]);
+}
+
 languageSelect.addEventListener("change", () => setLanguage(languageSelect.value));
+syncLanguageOptions();
 setLanguage(language);
 
 function showMessage(text, isError = false) {
@@ -321,7 +352,7 @@ form.addEventListener("submit", async (event) => {
         "Content-Type": "application/json",
         "X-Telegram-Init-Data": telegram.initData,
       },
-      body: JSON.stringify({ query, region: document.querySelector("#region").value }),
+      body: JSON.stringify({ query, region: regionSelect.value, currency: currencySelect.value }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(

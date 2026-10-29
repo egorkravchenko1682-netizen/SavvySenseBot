@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f4ef" />
+    <meta name="theme-color" content="#090b0d" />
     <meta name="description" content="SavvyApp находит лучший вариант товара и объясняет выбор." />
     <title>SavvyApp — найди лучший вариант</title>
     <link rel="stylesheet" href="/styles.css" />
@@ -34,7 +34,9 @@
           <div class="url-field" id="url-field"><span class="link-icon" aria-hidden="true">⌕</span><input id="offer-url" name="query" type="text" autocomplete="off" placeholder="Например, футболка Nike Air Max" maxlength="300" /><button class="paste-button" id="paste-button" type="button" aria-label="Вставить текст из буфера обмена" data-i18n="paste">Вставить</button></div>
           <p class="field-hint" id="url-hint" data-i18n="fieldHint">Напиши модель и важные детали — покажем лучший найденный вариант.</p>
           <label class="field-label region-label" for="region" data-i18n="shipTo">Куда доставлять?</label>
-          <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY" data-region="BY">Беларусь</option><option value="RU" data-region="RU">Россия</option><option value="KZ" data-region="KZ">Казахстан</option><option value="UZ" data-region="UZ">Узбекистан</option><option value="KG" data-region="KG">Кыргызстан</option><option value="AM" data-region="AM">Армения</option><option value="AZ" data-region="AZ">Азербайджан</option><option value="MD" data-region="MD">Молдова</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
+          <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY" data-region="BY">Беларусь</option><option value="RU" data-region="RU">Россия</option><option value="KZ" data-region="KZ">Казахстан</option><option value="UZ" data-region="UZ">Узбекистан</option><option value="KG" data-region="KG">Кыргызстан</option><option value="AM" data-region="AM">Армения</option><option value="AZ" data-region="AZ">Азербайджан</option><option value="MD" data-region="MD">Молдова</option><option value="TJ" data-region="TJ">Таджикистан</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
+          <label class="field-label region-label" for="currency" data-i18n="displayCurrency">Валюта отображения</label>
+          <div class="select-wrap"><span class="globe-icon" aria-hidden="true">¤</span><select id="currency" name="currency"><option value="BYN">BYN — Белорусский рубль</option><option value="RUB">RUB — Российский рубль</option><option value="KZT">KZT — Казахстанский тенге</option><option value="UZS">UZS — Узбекский сум</option><option value="KGS">KGS — Кыргызский сом</option><option value="AMD">AMD — Армянский драм</option><option value="AZN">AZN — Азербайджанский манат</option><option value="MDL">MDL — Молдавский лей</option><option value="TJS">TJS — Таджикский сомони</option><option value="USD">USD — US dollar</option><option value="EUR">EUR — Euro</option><option value="GBP">GBP — British pound</option><option value="CNY">CNY — Chinese yuan</option><option value="PLN">PLN — Polish złoty</option><option value="TRY">TRY — Turkish lira</option><option value="JPY">JPY — Japanese yen</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
           <button class="primary-button" type="submit"><span data-i18n="searchButton">Найти лучший вариант</span><span class="button-arrow" aria-hidden="true">↗</span></button>
           <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
         </form>

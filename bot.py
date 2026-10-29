@@ -64,6 +64,11 @@ WEBAPP_REGION_CURRENCIES = {
     "AM": "AMD",
     "AZ": "AZN",
     "MD": "MDL",
+    "TJ": "TJS",
+}
+WEBAPP_CURRENCIES = {
+    "BYN", "RUB", "KZT", "UZS", "KGS", "AMD", "AZN", "MDL", "TJS",
+    "USD", "EUR", "GBP", "CNY", "PLN", "TRY", "JPY",
 }
 
 WEBAPP_REQUESTS = defaultdict(deque)
@@ -300,6 +305,9 @@ def _miniapp_search(user_id, payload):
         or region not in WEBAPP_REGION_CURRENCIES
     ):
         raise ValueError("Укажи название товара и страну доставки.")
+    currency = payload.get("currency", WEBAPP_REGION_CURRENCIES[region])
+    if not isinstance(currency, str) or currency not in WEBAPP_CURRENCIES:
+        raise ValueError("Выбери поддерживаемую валюту.")
 
     query = query.strip()
     try:
@@ -317,7 +325,7 @@ def _miniapp_search(user_id, payload):
         user=UserContext(
             user_id=user_id,
             region=region,
-            currency=WEBAPP_REGION_CURRENCIES[region],
+            currency=currency,
         ),
     ))
     if not response.success:
@@ -325,7 +333,6 @@ def _miniapp_search(user_id, payload):
 
     data = response.data or {}
     deal = data.get("deal_analysis") or {}
-    best = deal.get("best_offer")
     offers = [offer for offer in data.get("offers", []) if isinstance(offer, dict)]
     usable_offers = [offer for offer in offers if offer.get("usable") is True]
 
@@ -336,20 +343,28 @@ def _miniapp_search(user_id, payload):
             offer.get("currency"), offer.get("region"), product.get("title"),
         ))
 
-    if not best:
+    # Mini App is an exact-product search: analogues and accessories are never
+    # promoted to results. Re-evaluate only exact candidates so a similar item
+    # cannot win the DealEngine's ranking.
+    candidates = [offer for offer in usable_offers if offer.get("status") == "exact"]
+    if candidates:
+        exact_deal = savvy.deal_engine.evaluate(
+            offers=candidates,
+            requested_condition=(data.get("product_dna") or {}).get("condition") or "any",
+        )
+        best = exact_deal.get("best_offer")
+        deal = exact_deal
+    else:
+        best = None
+    if not best or best.get("status") != "exact":
         return {
             "query": query,
-            "currency": data.get("currency", WEBAPP_REGION_CURRENCIES[region]),
+        "currency": currency,
             "best": None,
             "alternatives": [],
-            "found_count": len({offer_key(offer) for offer in usable_offers}),
-            "message": "Надёжного предложения с ценой пока нет. Попробуй уточнить бренд или модель.",
+            "found_count": 0,
+            "message": "Точных совпадений с подтверждённой ценой не найдено. Уточни бренд, модель, размер или артикул.",
         }
-
-    # Put exact matches first; keep the first screen focused on a few choices.
-    candidates = [offer for offer in usable_offers if offer.get("status") == "exact"]
-    if not candidates:
-        candidates = [offer for offer in usable_offers if offer.get("status") == "similar"]
 
     selected = [best]
     seen_keys = {offer_key(best)}
@@ -380,7 +395,7 @@ def _miniapp_search(user_id, payload):
 
     return {
         "query": query,
-        "currency": data.get("currency", WEBAPP_REGION_CURRENCIES[region]),
+        "currency": currency,
         "best": best_card,
         "alternatives": alternatives[1:],
         "found_count": len({offer_key(offer) for offer in candidates}),
