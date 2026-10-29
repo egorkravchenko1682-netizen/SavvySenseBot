@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#090b0d" />
+    <meta name="description" content="SAVVY проверяет товарные предложения и сравнивает полную стоимость покупки." />
+    <title>SavvyApp — найди лучший вариант</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" id="brand-home" href="/" aria-label="SAVVY — главная"><span class="brand-mark" aria-hidden="true">✳</span><span>SAVVY<small class="brand-subtitle">PERSONAL SHOPPING AI</small></span></a>
+        <div class="topbar-actions">
+          <label class="language-picker" for="language" aria-label="Выбрать язык"><span aria-hidden="true">🌐</span><select id="language" name="language"><option value="ru">РУС</option><option value="en">ENG</option><option value="kk">ҚАЗ</option></select><span aria-hidden="true">⌄</span></label>
+          <span class="beta-pill"><span class="status-dot"></span><span data-i18n="beta">ранний доступ</span></span>
+        </div>
+      </header>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="sparkle" aria-hidden="true">✳</span> <span data-i18n="heroEyebrow">PURCHASE INTELLIGENCE</span></p>
+          <h1 id="hero-title" data-i18n="heroTitle">Проверь перед покупкой.</h1>
+          <p class="hero-description" data-i18n="heroDescription">Название или ссылка на товар — SAVVY проверит совпадение, цену и условия доставки.</p>
+        </div>
+        <div class="hero-orbit" aria-hidden="true"><span class="orbit-ring"></span><span class="orbit-center">✳</span><span class="orbit-caption">SAVVY<br />DECISION</span></div>
+      </section>
+      <section class="check-section" aria-labelledby="check-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="sectionEyebrow">ЧТО ВЫ ХОТИТЕ ПРОВЕРИТЬ?</p><h2 id="check-title" data-i18n="formTitle">Добавьте товар, ссылку или фото</h2></div><span class="step-count">01 <span>/ 01</span></span></div>
+        <form id="offer-form" novalidate>
+          <div class="search-modes" role="tablist" aria-label="Тип запроса">
+            <button class="search-mode active" type="button" role="tab" aria-selected="true" data-mode="text" data-i18n="modeText">✎ Текст</button>
+            <button class="search-mode" type="button" role="tab" aria-selected="false" data-mode="url" data-i18n="modeLink">↗ Ссылка на товар</button>
+          </div>
+          <label class="field-label" id="query-label" for="offer-url" data-i18n="productName">Что хотите проверить или найти?</label>
+          <div class="url-field" id="url-field"><span class="link-icon" aria-hidden="true">⌕</span><input id="offer-url" name="query" type="text" autocomplete="off" placeholder="Например, футболка Nike до 100 BYN" maxlength="300" /><button class="paste-button" id="paste-button" type="button" aria-label="Вставить текст из буфера обмена" data-i18n="paste">Вставить</button></div>
+          <p class="field-hint" id="url-hint" data-i18n="fieldHint">Можно написать название, характеристики и бюджет или вставить ссылку на товар.</p>
+          <div class="search-settings">
+            <div><label class="field-label region-label" for="region" data-i18n="shipTo">Доставка</label>
+              <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY" data-region="BY">Беларусь</option><option value="RU" data-region="RU">Россия</option><option value="KZ" data-region="KZ">Казахстан</option><option value="UZ" data-region="UZ">Узбекистан</option><option value="KG" data-region="KG">Кыргызстан</option><option value="AM" data-region="AM">Армения</option><option value="AZ" data-region="AZ">Азербайджан</option><option value="MD" data-region="MD">Молдова</option><option value="TJ" data-region="TJ">Таджикистан</option><option value="TM" data-region="TM">Туркменистан</option><option value="GE" data-region="GE">Грузия</option><option value="UA" data-region="UA">Украина</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
+            </div>
+            <div><label class="field-label region-label" for="currency" data-i18n="displayCurrency">Валюта</label>
+              <div class="select-wrap"><span class="globe-icon" aria-hidden="true">¤</span><select id="currency" name="currency"><option value="BYN">BYN — Белорусский рубль</option><option value="RUB">RUB — Российский рубль</option><option value="KZT">KZT — Казахстанский тенге</option><option value="UZS">UZS — Узбекский сум</option><option value="KGS">KGS — Кыргызский сом</option><option value="AMD">AMD — Армянский драм</option><option value="AZN">AZN — Азербайджанский манат</option><option value="MDL">MDL — Молдавский лей</option><option value="TJS">TJS — Таджикский сомони</option><option value="TMT">TMT — Туркменский манат</option><option value="GEL">GEL — Грузинский лари</option><option value="UAH">UAH — Украинская гривна</option><option value="USD">USD — US dollar</option><option value="EUR">EUR — Euro</option><option value="GBP">GBP — British pound</option><option value="CNY">CNY — Chinese yuan</option><option value="PLN">PLN — Polish złoty</option><option value="TRY">TRY — Turkish lira</option><option value="JPY">JPY — Japanese yen</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
+            </div>
+          </div>
+          <button class="primary-button" type="submit"><span data-i18n="searchButton">Найти лучший вариант</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="trust-note"><span class="lock-icon" aria-hidden="true">⌑</span><span data-i18n="trustNote">Часть площадок работает нестабильно. Стоимость доставки и пошлин иногда оценивается, а не подтверждается продавцом.</span></div>
+        <p class="privacy-note" data-i18n="privacyNote">Название и выбранная страна отправляются Telegram-боту и поисковым площадкам. Mini App не сохраняет их в базе.</p>
+      </section>
+      <section class="results-section" id="results" hidden aria-live="polite">
+        <div class="results-heading"><div><p class="eyebrow" data-i18n="resultsEyebrow">РЕЗУЛЬТАТ ПОИСКА</p><h2 id="results-title" data-i18n="resultsTitle">Лучший вариант</h2></div><button class="text-button" id="new-search" type="button" data-i18n="newSearch">Новый поиск</button></div>
+        <p class="result-status" id="result-status"></p>
+        <article class="best-card" id="best-card"></article>
+        <button class="secondary-button" id="compare-toggle" type="button" hidden>Показать другие варианты</button>
+        <div class="alternatives" id="alternatives" hidden></div>
+      </section>
+      <section class="promise-row" id="promises" aria-label="Что SAVVY будет проверять"><div class="promise-item"><span class="promise-icon price-icon">↓</span><span data-i18n="promiseCost">Итоговая<br />стоимость</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon seller-icon">✓</span><span data-i18n="promiseSeller">Надёжность<br />продавца</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon match-icon">⌕</span><span data-i18n="promiseMatch">Точное<br />совпадение</span></div></section>
+      <details class="help-panel"><summary><span class="help-mark">?</span><span data-i18n="helpTitle">Помощь по приложению</span><span class="help-chevron">⌄</span></summary><div class="help-content"><p data-i18n="helpBody">Введите название товара или переключитесь на ссылку. Укажите страну доставки и валюту. SAVVY покажет точные совпадения и известные расходы; если продавец не сообщил доставку или пошлину, сумма будет помечена как неподтверждённая.</p><p data-i18n="helpLimits">Фото, история цен и автоматические уведомления пока не подключены.</p></div></details>
+      <footer class="footer"><span data-i18n="footerSlogan">Покупай осознанно.</span><span class="footer-mark">SAVVY © 2026</span></footer>
+    </main>
+  </body>
+</html>

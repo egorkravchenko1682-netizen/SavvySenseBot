@@ -47,7 +47,10 @@ def is_gift_request(text: Optional[str]) -> bool:
     return any(word in text_l for word in GIFT_TRIGGER_WORDS)
 
 
-def extract_gift_request(text: Optional[str]) -> dict[str, Any]:
+def extract_gift_request(
+    text: Optional[str],
+    default_currency: Optional[str] = None,
+) -> dict[str, Any]:
     """
     Извлекает из текста получателя, повод и бюджет подарка.
 
@@ -72,7 +75,7 @@ def extract_gift_request(text: Optional[str]) -> dict[str, Any]:
             occasion = key
             break
 
-    budget, currency = extract_budget(text or "")
+    budget, currency = extract_budget(text or "", default_currency=default_currency)
 
     return {
         "recipient": recipient,

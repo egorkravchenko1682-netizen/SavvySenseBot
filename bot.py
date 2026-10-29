@@ -1,7 +1,18 @@
 import logging
 import os
+import threading
+import time
+from collections import defaultdict, deque
+from urllib.parse import urlsplit
 
 import telebot
+from telebot.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    MenuButtonWebApp,
+    ReplyKeyboardRemove,
+    WebAppInfo,
+)
 
 from core import SavvyCore
 
@@ -9,6 +20,7 @@ from core.models import (
     SavvyRequest,
     UserContext,
 )
+from webapp.server import configure_api, start_server as start_webapp_server
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -24,6 +36,48 @@ BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
     ""
 ).strip()
+
+DEFAULT_WEBAPP_URL = "https://savvysensebot-production.up.railway.app"
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip() or DEFAULT_WEBAPP_URL
+try:
+    parsed_webapp_url = urlsplit(WEBAPP_URL)
+    if (
+        parsed_webapp_url.scheme != "https"
+        or not parsed_webapp_url.hostname
+        or parsed_webapp_url.username
+        or parsed_webapp_url.password
+        or parsed_webapp_url.port not in {None, 443}
+        or parsed_webapp_url.path not in {"", "/"}
+        or parsed_webapp_url.query
+        or parsed_webapp_url.fragment
+    ):
+        WEBAPP_URL = ""
+except ValueError:
+    WEBAPP_URL = ""
+
+WEBAPP_REGION_CURRENCIES = {
+    "BY": "BYN",
+    "RU": "RUB",
+    "KZ": "KZT",
+    "UZ": "UZS",
+    "KG": "KGS",
+    "AM": "AMD",
+    "AZ": "AZN",
+    "MD": "MDL",
+    "TJ": "TJS",
+    "TM": "TMT",
+    "GE": "GEL",
+    "UA": "UAH",
+}
+WEBAPP_CURRENCIES = {
+    "BYN", "RUB", "KZT", "UZS", "KGS", "AMD", "AZN", "MDL", "TJS",
+    "USD", "EUR", "GBP", "CNY", "PLN", "TRY", "JPY", "TMT", "GEL", "UAH",
+}
+
+WEBAPP_REQUESTS = defaultdict(deque)
+WEBAPP_REQUESTS_LOCK = threading.Lock()
+WEBAPP_REQUEST_LIMIT = 3
+WEBAPP_REQUEST_WINDOW_SECONDS = 60
 
 
 if not BOT_TOKEN:
@@ -215,19 +269,199 @@ def format_price(
     commands=["start"]
 )
 def start_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
+    instructions = (
         "🧠 SAVVY SENSE\n\n"
-
-        "🌎 Ищу товары по всему миру.\n\n"
-
-        "Отправь:\n"
-        "• название товара\n"
-        "• ссылку\n"
-        "• фотографию товара",
+        "Найду подходящие предложения и помогу выбрать лучший вариант.\n\n"
+        "Поиск, сравнение и результат — прямо в приложении."
     )
+
+    if WEBAPP_URL:
+        app_button = InlineKeyboardMarkup()
+        app_button.add(InlineKeyboardButton(
+            text="✨ SavvyApp",
+            web_app=WebAppInfo(url=WEBAPP_URL),
+        ))
+        # Remove the old reply-keyboard launcher: Telegram leaves it visible
+        # across deploys, and that launch mode does not provide authenticated initData.
+        bot.send_message(
+            message.chat.id,
+            instructions,
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        bot.send_message(
+            message.chat.id,
+            "Открой поиск и сравнение товаров:",
+            reply_markup=app_button,
+        )
+        return
+
+    bot.send_message(message.chat.id, instructions)
+
+
+def _miniapp_search(user_id, payload):
+    query = payload.get("query")
+    region = payload.get("region")
+    if (
+        not isinstance(query, str)
+        or not 2 <= len(query.strip()) <= 300
+        or not isinstance(region, str)
+        or region not in WEBAPP_REGION_CURRENCIES
+    ):
+        raise ValueError("Укажи название товара и страну доставки.")
+    currency = payload.get("currency", WEBAPP_REGION_CURRENCIES[region])
+    if not isinstance(currency, str) or currency not in WEBAPP_CURRENCIES:
+        raise ValueError("Выбери поддерживаемую валюту.")
+
+    query = query.strip()
+    try:
+        parsed_query = urlsplit(query)
+    except ValueError as error:
+        raise ValueError("Введи название товара, а не ссылку.") from error
+    if query.lower().startswith("www.") or (parsed_query.scheme and parsed_query.scheme not in {"http", "https"}):
+        raise ValueError("Пришлите публичную ссылку товара с http:// или https:// либо введите название.")
+    if parsed_query.scheme and (not parsed_query.hostname or parsed_query.username or parsed_query.password):
+        raise ValueError("Ссылка на товар выглядит некорректной.")
+
+    if not _allow_webapp_request(user_id):
+        raise RuntimeError("Слишком много поисков подряд. Попробуй через минуту.")
+
+    response = savvy.process(SavvyRequest(
+        url=query if parsed_query.scheme in {"http", "https"} else None,
+        text=None if parsed_query.scheme in {"http", "https"} else query,
+        user=UserContext(
+            user_id=user_id,
+            region=region,
+            currency=currency,
+        ),
+    ))
+    if not response.success:
+        raise ValueError(response.error or "Не удалось прочитать запрос. Проверьте ссылку или измените название товара.")
+    if response.intent == "conversation":
+        raise ValueError("Привет! Я помогу найти товар или подобрать подарок. Напиши, что ищешь и какой бюджет.")
+
+    data = response.data or {}
+    if response.intent == "gift":
+        ideas = []
+        for suggestion in data.get("gift_suggestions", []):
+            offer = suggestion.get("offer") if isinstance(suggestion, dict) else None
+            if not isinstance(offer, dict) or offer.get("price") is None:
+                continue
+            item = _miniapp_offer(offer, data)
+            item["match_type"] = "gift"
+            item["gift_category"] = str(suggestion.get("category") or "")[:100]
+            ideas.append(item)
+        return {
+            "query": query,
+            "currency": currency,
+            "best": ideas[0] if ideas else None,
+            "alternatives": ideas[1:5],
+            "found_count": len(ideas),
+            "message": None if ideas else "Подходящих предложений пока не найдено.",
+        }
+    deal = data.get("deal_analysis") or {}
+    offers = [offer for offer in data.get("offers", []) if isinstance(offer, dict)]
+    usable_offers = [offer for offer in offers if offer.get("usable") is True]
+
+    def offer_key(offer):
+        product = offer.get("product") if isinstance(offer.get("product"), dict) else {}
+        return tuple(str(value or "") for value in (
+            offer.get("url"), offer.get("source"), offer.get("price"),
+            offer.get("currency"), offer.get("region"), product.get("title"),
+        ))
+
+    # Mini App is an exact-product search: analogues and accessories are never
+    # promoted to results. Re-evaluate only exact candidates so a similar item
+    # cannot win the DealEngine's ranking.
+    candidates = [offer for offer in usable_offers if offer.get("status") == "exact"]
+    if candidates:
+        exact_deal = savvy.deal_engine.evaluate(
+            offers=candidates,
+            requested_condition=(data.get("product_dna") or {}).get("condition") or "any",
+        )
+        best = exact_deal.get("best_offer")
+        deal = exact_deal
+    else:
+        best = None
+    if not best or best.get("status") != "exact":
+        return {
+            "query": query,
+        "currency": currency,
+            "best": None,
+            "alternatives": [],
+            "found_count": 0,
+            "message": "Точных совпадений с подтверждённой ценой не найдено. Уточни бренд, модель, размер или артикул.",
+        }
+
+    selected = [best]
+    seen_keys = {offer_key(best)}
+    for offer in candidates:
+        key = offer_key(offer)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        selected.append(offer)
+        if len(selected) >= 5:
+            break
+    alternatives = [_miniapp_offer(offer, data) for offer in selected[:5]]
+    best_card = alternatives[0]
+
+    match = best.get("match") or {}
+    exact = best.get("status") == "exact"
+    matched = match.get("matched_attributes") if isinstance(match, dict) else None
+    comparison_source = deal.get("comparison_source")
+    reason_code = {
+        "real_cost": "lowest_total",
+        "price": "lowest_price",
+        "quality": "quality_tiebreak",
+        "risk": "risk_tiebreak",
+    }.get(comparison_source, "only_comparable")
+    best_card["reason_codes"] = ["exact_match" if exact else "similar_match", reason_code]
+    best_card["matched_attributes"] = [str(item)[:40] for item in (matched or [])[:3]]
+    best_card["match_type"] = "exact" if exact else "similar"
+
+    return {
+        "query": data.get("query") or query,
+        "currency": currency,
+        "best": best_card,
+        "alternatives": alternatives[1:],
+        "found_count": len({offer_key(offer) for offer in candidates}),
+        "message": None,
+    }
+
+
+def _miniapp_offer(offer, data):
+    url = offer.get("url")
+    try:
+        parsed = urlsplit(url) if isinstance(url, str) else None
+    except ValueError:
+        parsed = None
+    if not parsed or parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        url = None
+    product = offer.get("product") if isinstance(offer.get("product"), dict) else {}
+    price = offer.get("price")
+    total_known = offer.get("real_cost_known") is True and offer.get("real_cost") is not None
+    total = offer.get("real_cost") if total_known else offer.get("real_cost_partial")
+    return {
+        "title": str(product.get("title") or "Найденное предложение")[:300],
+        "source": str(offer.get("source") or "Магазин")[:80],
+        "seller": str(offer.get("seller"))[:120] if offer.get("seller") else None,
+        "region": str(offer.get("region"))[:40] if offer.get("region") else None,
+        "match_type": offer.get("status") if offer.get("status") in {"exact", "similar"} else "similar",
+        "currency": offer.get("real_cost_currency") or offer.get("currency") or data.get("currency"),
+        "price": price,
+        "total": total,
+        "total_known": total_known,
+        "delivery": offer.get("delivery"),
+        "delivery_estimated": bool(offer.get("delivery_estimated")),
+        "taxes": offer.get("taxes"),
+        "taxes_estimated": bool(offer.get("taxes_estimated")),
+        "duties": offer.get("duties"),
+        "duties_estimated": bool(offer.get("duties_estimated")),
+        "risk": offer.get("risk_level") or "unknown",
+        "quality": offer.get("deal_quality_score"),
+        "quality_known": offer.get("deal_quality_known") is True,
+        "url": url,
+    }
 
 
 # =========================
@@ -238,104 +472,7 @@ def start_command(message):
     commands=["help"]
 )
 def help_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🧠 SAVVY SENSE\n\n"
-
-        "/start — запустить\n"
-        "/find — найти товар\n"
-        "/compare — сравнить\n"
-        "/check — проверить товар\n"
-        "/cheaper — найти дешевле\n"
-        "/track — отслеживать цену\n"
-        "/help — помощь",
-    )
-
-
-# =========================
-# FIND
-# =========================
-
-@bot.message_handler(
-    commands=["find"]
-)
-def find_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🔎 Напиши, какой товар нужно найти.",
-    )
-
-
-# =========================
-# COMPARE
-# =========================
-
-@bot.message_handler(
-    commands=["compare"]
-)
-def compare_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "⚖️ Отправь товары или ссылки "
-        "для сравнения.",
-    )
-
-
-# =========================
-# CHECK
-# =========================
-
-@bot.message_handler(
-    commands=["check"]
-)
-def check_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🔎 Отправь ссылку или "
-        "описание товара.",
-    )
-
-
-# =========================
-# CHEAPER
-# =========================
-
-@bot.message_handler(
-    commands=["cheaper"]
-)
-def cheaper_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "💰 Отправь ссылку или "
-        "название товара.",
-    )
-
-
-# =========================
-# TRACK
-# =========================
-
-@bot.message_handler(
-    commands=["track"]
-)
-def track_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "📉 Отправь ссылку на товар "
-        "для отслеживания.",
-    )
+    start_command(message)
 
 
 # =========================
@@ -391,14 +528,51 @@ def handle_photo(message):
     content_types=["text"]
 )
 def handle_text(message):
+    bot.send_message(
+        message.chat.id,
+        "Поиск и результаты SAVVY находятся в приложении. Нажми ✨ SavvyApp в меню чата.",
+    )
 
-    text = message.text.strip()
+
+def _allow_webapp_request(user_id):
+    now = time.monotonic()
+    with WEBAPP_REQUESTS_LOCK:
+        history = WEBAPP_REQUESTS[user_id]
+        while history and now - history[0] >= WEBAPP_REQUEST_WINDOW_SECONDS:
+            history.popleft()
+        if len(history) >= WEBAPP_REQUEST_LIMIT:
+            return False
+        history.append(now)
+        if len(WEBAPP_REQUESTS) > 5000:
+            expired_users = [
+                key for key, values in WEBAPP_REQUESTS.items()
+                if not values or now - values[-1] >= WEBAPP_REQUEST_WINDOW_SECONDS
+            ]
+            for key in expired_users:
+                WEBAPP_REQUESTS.pop(key, None)
+        return True
+
+
+@bot.message_handler(
+    content_types=["web_app_data"]
+)
+def handle_webapp_data(message):
+    bot.send_message(
+        message.chat.id,
+        "Для поиска открой актуальную версию Mini App через кнопку ✨ SavvyApp в меню чата.",
+    )
+
+
+def _process_text_query(chat_id, user_id, text, region="BY", currency="USD"):
+    text = (text or "").strip()
 
     if not text:
         return
 
     user = UserContext(
-        user_id=message.from_user.id,
+        user_id=user_id,
+        region=region,
+        currency=currency,
     )
 
     request = SavvyRequest(
@@ -413,7 +587,7 @@ def handle_text(message):
     if not response.success:
 
         bot.send_message(
-            message.chat.id,
+            chat_id,
 
             f"❌ "
             f"{response.error or 'Ошибка обработки.'}",
@@ -421,8 +595,12 @@ def handle_text(message):
 
         return
 
+    if response.intent == "conversation":
+        bot.send_message(chat_id, "Привет! Я помогу найти товар, сравнить предложения или подобрать подарок. Напиши, что ищешь и какой бюджет.")
+        return
+
     if response.intent == "gift":
-        _send_gift_suggestions(message.chat.id, response)
+        _send_gift_suggestions(chat_id, response)
         return
 
     # =========================
@@ -957,7 +1135,7 @@ def handle_text(message):
     )
 
     send_long_message(
-        message.chat.id,
+        chat_id,
         final_message,
     )
 
@@ -1072,6 +1250,27 @@ if __name__ == "__main__":
     print(
         "🧠 SAVVY SENSE is starting..."
     )
+
+    if WEBAPP_URL:
+        try:
+            bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="✨ SavvyApp",
+                    web_app=WebAppInfo(url=WEBAPP_URL),
+                )
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("Unable to set Telegram Mini App menu button")
+
+    # Hide legacy slash-command suggestions; every user action lives in SavvyApp.
+    for language_code in (None, "ru", "en", "be"):
+        try:
+            bot.set_my_commands([], language_code=language_code)
+        except Exception:
+            logging.getLogger(__name__).warning("Unable to clear Telegram command suggestions")
+
+    configure_api(BOT_TOKEN, _miniapp_search, WEBAPP_URL)
+    start_webapp_server()
 
     bot.infinity_polling(
         skip_pending=True,

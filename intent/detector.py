@@ -1,4 +1,5 @@
 from typing import Optional
+import re
 
 
 def detect_intent(
@@ -23,6 +24,20 @@ def detect_intent(
         return "unknown"
 
     text = text.lower().strip()
+
+    # Short social messages are conversation, not shopping queries. Keep
+    # unknown product names searchable: only classify common non-shopping
+    # phrases here instead of relying on a closed product vocabulary.
+    normalized = re.sub(r"[!?.,\s]+", " ", text).strip()
+    if re.fullmatch(
+        r"(?:привет|здравствуй|здравствуйте|доброе утро|добрый день|добрый вечер|"
+        r"как дела|как ты|что нового|спасибо|пока|hello|hi|hey|how are you|"
+        r"good morning|good afternoon|good evening|thanks|thank you|bye|"
+        r"сәлем|сәлеметсіз бе|қалайсың|қалыңыз қалай|рақмет|сау бол)"
+        r"(?: (?:как дела|как ты|что нового|how are you|қалайсың|қалыңыз қалай))*",
+        normalized,
+    ):
+        return "conversation"
 
     # Сравнение
     compare_words = (

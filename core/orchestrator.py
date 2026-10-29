@@ -12,7 +12,6 @@ from product.dna import build_product_dna
 from product.query import build_search_plan
 
 from search.engine import GlobalSearchEngine
-from search.adapters.demo import DemoAdapter
 from search.adapters.duckduckgo import DuckDuckGoAdapter
 
 from marketplaces.wildberries import WildberriesAdapter
@@ -81,7 +80,6 @@ class SavvyCore:
 
         self.search_engine = search_engine or GlobalSearchEngine(
             adapters=[
-                DemoAdapter(),
                 WildberriesAdapter(),
                 OzonAdapter(),
                 EbayAdapter(),
@@ -136,19 +134,48 @@ class SavvyCore:
 
         intent = detect_intent(text=raw_text, input_type=input_type)
 
+        if intent == "conversation":
+            return SavvyResponse(success=True, intent=intent, data={})
+
         # =========================
         # ÐÐÐÐÐ ÐÐ: Ð¾ÑÐ´ÐµÐ»ÑÐ½Ð°Ñ Ð²ÐµÑÐºÐ°, Ð±ÐµÐ· ÑÑÑÐ¾Ð³Ð¾Ð³Ð¾ ÑÐ¾Ð²Ð°ÑÐ° Ð´Ð»Ñ ÑÑÐ°Ð²Ð½ÐµÐ½Ð¸Ñ
         # =========================
         if input_type == "text" and is_gift_request(raw_text):
             return self._process_gift(raw_text, user)
 
-        product = identify_product(text=raw_text, input_type=input_type)
+        source_offer = None
+        product_text = raw_text
+        if input_type == "url" and raw_text:
+            source_offer = self.extractor.extract(raw_text)
+            product_text = str(source_offer.get("title") or "").strip()
+            if not product_text or source_offer.get("extracted") is not True:
+                return SavvyResponse(
+                    success=False,
+                    intent=intent,
+                    error="Не удалось прочитать товар по этой ссылке. Проверьте, что это открытая страница самого товара.",
+                )
+            source_offer["source"] = source_offer.get("domain") or "Исходная ссылка"
+            source_offer["region"] = user.region
+
+        regional_currency = {
+            "BY": "BYN", "RU": "RUB", "KZ": "KZT", "UZ": "UZS",
+            "KG": "KGS", "AM": "AMD", "AZ": "AZN", "MD": "MDL",
+            "TJ": "TJS", "TM": "TMT", "GE": "GEL", "UA": "UAH",
+        }.get(user.region, user.currency)
+
+        product = identify_product(
+            text=product_text,
+            input_type=input_type,
+            default_currency=regional_currency,
+        )
         product_dna = build_product_dna(product, user=user)
         search_plan = build_search_plan(product_dna)
 
         data: dict[str, Any] = {
             "region": user.region,
             "currency": user.currency,
+            "query": product_text,
+            "source_url": raw_text if input_type == "url" else None,
             "product": product,
             "product_dna": product_dna,
             "search_plan": search_plan,
@@ -165,7 +192,7 @@ class SavvyCore:
             return SavvyResponse(success=True, intent=intent, data=data)
 
         queries = search_plan.get("queries") or (
-            [raw_text] if raw_text else []
+            [product_text] if product_text else []
         )
 
         if not queries:
@@ -185,6 +212,9 @@ class SavvyCore:
             currency=currency,
             budget=budget,
         )
+
+        if source_offer and source_offer.get("price") is not None:
+            search_results.append(source_offer)
 
         offers = self._extract_offers(search_results)
 
@@ -225,7 +255,14 @@ class SavvyCore:
         user: UserContext,
     ) -> SavvyResponse:
 
-        gift_request = extract_gift_request(raw_text)
+        gift_request = extract_gift_request(
+            raw_text,
+            default_currency={
+                "BY": "BYN", "RU": "RUB", "KZ": "KZT", "UZ": "UZS",
+                "KG": "KGS", "AM": "AMD", "AZ": "AZN", "MD": "MDL",
+                "TJ": "TJS", "TM": "TMT", "GE": "GEL", "UA": "UAH",
+            }.get(user.region, user.currency),
+        )
 
         region = user.region
         currency = gift_request.get("currency") or user.currency

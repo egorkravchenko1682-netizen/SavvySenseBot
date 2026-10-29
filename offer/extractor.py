@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
+
+from .safe_fetch import fetch_public_html
 
 from .extraction import (
     AttributeExtractor,
@@ -15,6 +17,8 @@ from .extraction import (
     ProductExtractor,
     StructuredDataExtractor,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OfferExtractor:
@@ -93,19 +97,14 @@ class OfferExtractor:
             )
 
         try:
-            response = requests.get(
+            final_url, page_html = fetch_public_html(
                 url,
                 headers=self._headers(),
                 timeout=self.timeout,
-                allow_redirects=True,
             )
 
-            response.raise_for_status()
-
-            final_url = response.url
-
             soup = BeautifulSoup(
-                response.text,
+                page_html,
                 "html.parser",
             )
 
@@ -115,7 +114,7 @@ class OfferExtractor:
 
             structured_objects = (
                 self.structured_data_extractor.extract(
-                    response.text
+                    page_html
                 )
             )
 
@@ -570,11 +569,10 @@ class OfferExtractor:
                 "extracted": True,
             }
 
-        except Exception as error:
-            print(
-                f"Offer extraction failed "
-                f"for {url}: {error}"
-            )
+        except Exception:
+            # Product links can contain private query parameters; do not log
+            # the URL or exception text returned by the remote site.
+            LOGGER.warning("Offer extraction failed")
 
             return self._fallback_result(
                 fallback,
