@@ -32,7 +32,8 @@ BOT_TOKEN = os.getenv(
     ""
 ).strip()
 
-WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
+DEFAULT_WEBAPP_URL = "https://savvysensebot-production.up.railway.app"
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip() or DEFAULT_WEBAPP_URL
 try:
     parsed_webapp_url = urlsplit(WEBAPP_URL)
     if (
