@@ -36,6 +36,9 @@ class CurrencyConverter:
             "KGS": 0.011,
             # Rounded indicative rate; it is not a live quote.
             "TJS": 0.1085,
+            "TMT": 0.176,
+            "GEL": 0.37,
+            "UAH": 0.024,
         }
 
     def normalize_currency(
@@ -76,6 +79,9 @@ class CurrencyConverter:
             "MDL": "MDL",
             "KGS": "KGS",
             "TJS": "TJS",
+            "TMT": "TMT",
+            "GEL": "GEL",
+            "UAH": "UAH",
         }
 
         return aliases.get(value, value)

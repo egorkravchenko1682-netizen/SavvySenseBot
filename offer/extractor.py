@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any
 from urllib.parse import urlparse
 
@@ -16,6 +17,8 @@ from .extraction import (
     ProductExtractor,
     StructuredDataExtractor,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OfferExtractor:
@@ -566,11 +569,10 @@ class OfferExtractor:
                 "extracted": True,
             }
 
-        except Exception as error:
-            print(
-                f"Offer extraction failed "
-                f"for {url}: {error}"
-            )
+        except Exception:
+            # Product links can contain private query parameters; do not log
+            # the URL or exception text returned by the remote site.
+            LOGGER.warning("Offer extraction failed")
 
             return self._fallback_result(
                 fallback,

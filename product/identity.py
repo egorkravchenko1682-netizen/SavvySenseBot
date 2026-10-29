@@ -10,6 +10,7 @@ _ATTRIBUTE_EXTRACTOR = AttributeExtractor()
 def identify_product(
     text: str | None = None,
     input_type: str | None = None,
+    default_currency: str | None = None,
 ) -> dict[str, Any]:
     """
     Формирует Product Identity из пользовательского запроса.
@@ -50,7 +51,8 @@ def identify_product(
     )
 
     budget, currency = _extract_budget(
-        text
+        text,
+        default_currency=default_currency,
     )
 
     return {
@@ -289,6 +291,7 @@ def _extract_brand_from_name(
 
 def _extract_budget(
     text: str,
+    default_currency: str | None = None,
 ) -> tuple[float | None, str | None]:
     """
     Извлекает бюджет только тогда,
@@ -315,6 +318,18 @@ def _extract_budget(
             r"[₽]\s*(\d+(?:[.,]\d+)?)",
             "RUB",
         ),
+        (r"[₸]\s*(\d+(?:[.,]\d+)?)", "KZT"),
+        (r"[₴]\s*(\d+(?:[.,]\d+)?)", "UAH"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:kzt|тенге|тг)\b", "KZT"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:uzs|сум(?:ов|а)?)\b", "UZS"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:kgs|сом(?:ов|а)?)\b", "KGS"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:amd|драм(?:ов|а)?)\b", "AMD"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:azn|манат(?:ов|а)?)\b", "AZN"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:mdl|молдавских\s+ле[йя])\b", "MDL"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:tjs|сомони)\b", "TJS"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:tmt|туркменских\s+манат(?:ов|а)?)\b", "TMT"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:gel|лари)\b", "GEL"),
+        (r"\b(\d+(?:[.,]\d+)?)\s*(?:uah|грив(?:ен|ны|на)?)\b", "UAH"),
         (
             r"\b(\d+(?:[.,]\d+)?)\s*"
             r"(?:usd|доллар(?:ов|а)?)\b",
@@ -341,10 +356,10 @@ def _extract_budget(
             "BYN",
         ),
         (
-            # Разговорное "200р" / "200 р." как рубли — не только
-            # полное "руб(лей/ля)", которое уже покрыто выше.
-            r"\b(\d+(?:[.,]\d+)?)\s*р\.?\b",
-            "RUB",
+            # "р." is ambiguous between Belarusian and Russian rubles;
+            # use the user's selected regional currency for this shorthand.
+            r"\b(\d+(?:[.,]\d+)?)\s*р\.?(?!\w)",
+            default_currency or "RUB",
         ),
     ]
 

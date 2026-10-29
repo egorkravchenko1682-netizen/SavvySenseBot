@@ -65,10 +65,13 @@ WEBAPP_REGION_CURRENCIES = {
     "AZ": "AZN",
     "MD": "MDL",
     "TJ": "TJS",
+    "TM": "TMT",
+    "GE": "GEL",
+    "UA": "UAH",
 }
 WEBAPP_CURRENCIES = {
     "BYN", "RUB", "KZT", "UZS", "KGS", "AMD", "AZN", "MDL", "TJS",
-    "USD", "EUR", "GBP", "CNY", "PLN", "TRY", "JPY",
+    "USD", "EUR", "GBP", "CNY", "PLN", "TRY", "JPY", "TMT", "GEL", "UAH",
 }
 
 WEBAPP_REQUESTS = defaultdict(deque)
@@ -314,14 +317,17 @@ def _miniapp_search(user_id, payload):
         parsed_query = urlsplit(query)
     except ValueError as error:
         raise ValueError("Введи название товара, а не ссылку.") from error
-    if parsed_query.scheme or query.lower().startswith("www."):
-        raise ValueError("Пока поиск работает по названию товара, не по ссылке.")
+    if query.lower().startswith("www.") or (parsed_query.scheme and parsed_query.scheme not in {"http", "https"}):
+        raise ValueError("Пришлите публичную ссылку товара с http:// или https:// либо введите название.")
+    if parsed_query.scheme and (not parsed_query.hostname or parsed_query.username or parsed_query.password):
+        raise ValueError("Ссылка на товар выглядит некорректной.")
 
     if not _allow_webapp_request(user_id):
         raise RuntimeError("Слишком много поисков подряд. Попробуй через минуту.")
 
     response = savvy.process(SavvyRequest(
-        text=query,
+        url=query if parsed_query.scheme in {"http", "https"} else None,
+        text=None if parsed_query.scheme in {"http", "https"} else query,
         user=UserContext(
             user_id=user_id,
             region=region,
@@ -329,9 +335,29 @@ def _miniapp_search(user_id, payload):
         ),
     ))
     if not response.success:
-        raise RuntimeError("Не удалось завершить поиск. Попробуй изменить запрос.")
+        raise ValueError(response.error or "Не удалось прочитать запрос. Проверьте ссылку или измените название товара.")
+    if response.intent == "conversation":
+        raise ValueError("Привет! Я помогу найти товар или подобрать подарок. Напиши, что ищешь и какой бюджет.")
 
     data = response.data or {}
+    if response.intent == "gift":
+        ideas = []
+        for suggestion in data.get("gift_suggestions", []):
+            offer = suggestion.get("offer") if isinstance(suggestion, dict) else None
+            if not isinstance(offer, dict) or offer.get("price") is None:
+                continue
+            item = _miniapp_offer(offer, data)
+            item["match_type"] = "gift"
+            item["gift_category"] = str(suggestion.get("category") or "")[:100]
+            ideas.append(item)
+        return {
+            "query": query,
+            "currency": currency,
+            "best": ideas[0] if ideas else None,
+            "alternatives": ideas[1:5],
+            "found_count": len(ideas),
+            "message": None if ideas else "Подходящих предложений пока не найдено.",
+        }
     deal = data.get("deal_analysis") or {}
     offers = [offer for offer in data.get("offers", []) if isinstance(offer, dict)]
     usable_offers = [offer for offer in offers if offer.get("usable") is True]
@@ -394,7 +420,7 @@ def _miniapp_search(user_id, payload):
     best_card["match_type"] = "exact" if exact else "similar"
 
     return {
-        "query": query,
+        "query": data.get("query") or query,
         "currency": currency,
         "best": best_card,
         "alternatives": alternatives[1:],
@@ -433,6 +459,7 @@ def _miniapp_offer(offer, data):
         "duties_estimated": bool(offer.get("duties_estimated")),
         "risk": offer.get("risk_level") or "unknown",
         "quality": offer.get("deal_quality_score"),
+        "quality_known": offer.get("deal_quality_known") is True,
         "url": url,
     }
 
@@ -566,6 +593,10 @@ def _process_text_query(chat_id, user_id, text, region="BY", currency="USD"):
             f"{response.error or 'Ошибка обработки.'}",
         )
 
+        return
+
+    if response.intent == "conversation":
+        bot.send_message(chat_id, "Привет! Я помогу найти товар, сравнить предложения или подобрать подарок. Напиши, что ищешь и какой бюджет.")
         return
 
     if response.intent == "gift":
