@@ -4,8 +4,9 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
+
+from .safe_fetch import fetch_public_html
 
 from .extraction import (
     AttributeExtractor,
@@ -93,19 +94,14 @@ class OfferExtractor:
             )
 
         try:
-            response = requests.get(
+            final_url, page_html = fetch_public_html(
                 url,
                 headers=self._headers(),
                 timeout=self.timeout,
-                allow_redirects=True,
             )
 
-            response.raise_for_status()
-
-            final_url = response.url
-
             soup = BeautifulSoup(
-                response.text,
+                page_html,
                 "html.parser",
             )
 
@@ -115,7 +111,7 @@ class OfferExtractor:
 
             structured_objects = (
                 self.structured_data_extractor.extract(
-                    response.text
+                    page_html
                 )
             )
 

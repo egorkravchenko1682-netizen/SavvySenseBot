@@ -1,7 +1,13 @@
+import json
 import logging
 import os
+import threading
+import time
+from collections import defaultdict, deque
+from urllib.parse import urlsplit
 
 import telebot
+from telebot.types import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 from core import SavvyCore
 
@@ -9,6 +15,7 @@ from core.models import (
     SavvyRequest,
     UserContext,
 )
+from webapp.server import start_server as start_webapp_server
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -24,6 +31,39 @@ BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
     ""
 ).strip()
+
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
+try:
+    parsed_webapp_url = urlsplit(WEBAPP_URL)
+    if (
+        parsed_webapp_url.scheme != "https"
+        or not parsed_webapp_url.hostname
+        or parsed_webapp_url.username
+        or parsed_webapp_url.password
+        or parsed_webapp_url.port not in {None, 443}
+        or parsed_webapp_url.path not in {"", "/"}
+        or parsed_webapp_url.query
+        or parsed_webapp_url.fragment
+    ):
+        WEBAPP_URL = ""
+except ValueError:
+    WEBAPP_URL = ""
+
+WEBAPP_REGION_CURRENCIES = {
+    "BY": "BYN",
+    "RU": "RUB",
+    "KZ": "KZT",
+    "UZ": "UZS",
+    "KG": "KGS",
+    "AM": "AMD",
+    "AZ": "AZN",
+    "MD": "MDL",
+}
+
+WEBAPP_REQUESTS = defaultdict(deque)
+WEBAPP_REQUESTS_LOCK = threading.Lock()
+WEBAPP_REQUEST_LIMIT = 3
+WEBAPP_REQUEST_WINDOW_SECONDS = 60
 
 
 if not BOT_TOKEN:
@@ -215,18 +255,27 @@ def format_price(
     commands=["start"]
 )
 def start_command(message):
+    reply_markup = None
+    instructions = (
+        "🧠 SAVVY SENSE\n\n"
+        "Ищу предложения по нескольким регионам и сравниваю доступные данные.\n\n"
+        "Пока Mini App принимает название товара. Проверка конкретной ссылки появится позже."
+    )
+
+    if WEBAPP_URL:
+        reply_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        reply_markup.add(
+            KeyboardButton(
+                text="🔎 Проверить покупку",
+                web_app=WebAppInfo(url=WEBAPP_URL),
+            )
+        )
+        instructions += "\n\nНажми кнопку ниже, чтобы начать поиск."
 
     bot.send_message(
         message.chat.id,
-
-        "🧠 SAVVY SENSE\n\n"
-
-        "🌎 Ищу товары по всему миру.\n\n"
-
-        "Отправь:\n"
-        "• название товара\n"
-        "• ссылку\n"
-        "• фотографию товара",
+        instructions,
+        reply_markup=reply_markup,
     )
 
 
@@ -391,14 +440,101 @@ def handle_photo(message):
     content_types=["text"]
 )
 def handle_text(message):
+    _process_text_query(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        text=message.text,
+    )
 
-    text = message.text.strip()
+
+def _allow_webapp_request(user_id):
+    now = time.monotonic()
+    with WEBAPP_REQUESTS_LOCK:
+        history = WEBAPP_REQUESTS[user_id]
+        while history and now - history[0] >= WEBAPP_REQUEST_WINDOW_SECONDS:
+            history.popleft()
+        if len(history) >= WEBAPP_REQUEST_LIMIT:
+            return False
+        history.append(now)
+        if len(WEBAPP_REQUESTS) > 5000:
+            expired_users = [
+                key for key, values in WEBAPP_REQUESTS.items()
+                if not values or now - values[-1] >= WEBAPP_REQUEST_WINDOW_SECONDS
+            ]
+            for key in expired_users:
+                WEBAPP_REQUESTS.pop(key, None)
+        return True
+
+
+@bot.message_handler(
+    content_types=["web_app_data"]
+)
+def handle_webapp_data(message):
+    user = message.from_user
+    web_app_data = getattr(message, "web_app_data", None)
+    raw_data = getattr(web_app_data, "data", "") if web_app_data else ""
+
+    if not user or not isinstance(raw_data, str) or len(raw_data) > 4096:
+        bot.send_message(message.chat.id, "Не удалось прочитать запрос. Открой Mini App и попробуй ещё раз.")
+        return
+
+    try:
+        payload = json.loads(raw_data)
+    except (json.JSONDecodeError, TypeError):
+        bot.send_message(message.chat.id, "Не удалось прочитать запрос. Открой Mini App и попробуй ещё раз.")
+        return
+
+    if not isinstance(payload, dict):
+        bot.send_message(message.chat.id, "Запрос имеет неверный формат.")
+        return
+
+    query = payload.get("query")
+    region = payload.get("region")
+    if (
+        not isinstance(query, str)
+        or not 2 <= len(query.strip()) <= 300
+        or not isinstance(region, str)
+        or region not in WEBAPP_REGION_CURRENCIES
+    ):
+        bot.send_message(message.chat.id, "Проверь название товара и страну доставки.")
+        return
+
+    query = query.strip()
+    try:
+        parsed_query = urlsplit(query)
+    except ValueError:
+        bot.send_message(message.chat.id, "Пока SAVVY принимает только название товара, без ссылки.")
+        return
+    if parsed_query.scheme or query.lower().startswith("www."):
+        bot.send_message(
+            message.chat.id,
+            "Пока Mini App ищет по названию товара. Проверку конкретных ссылок подключим отдельно, после защиты загрузки страниц.",
+        )
+        return
+
+    if not _allow_webapp_request(user.id):
+        bot.send_message(message.chat.id, "Слишком много запросов подряд. Подожди минуту и попробуй снова.")
+        return
+
+    _process_text_query(
+        chat_id=message.chat.id,
+        user_id=user.id,
+        text=query,
+        region=region,
+        currency=WEBAPP_REGION_CURRENCIES[region],
+    )
+
+
+def _process_text_query(chat_id, user_id, text, region="BY", currency="USD"):
+    text = (text or "").strip()
 
     if not text:
         return
 
     user = UserContext(
-        user_id=message.from_user.id,
+        user_id=user_id,
+        region=region,
+        currency=currency,
     )
 
     request = SavvyRequest(
@@ -413,7 +549,7 @@ def handle_text(message):
     if not response.success:
 
         bot.send_message(
-            message.chat.id,
+            chat_id,
 
             f"❌ "
             f"{response.error or 'Ошибка обработки.'}",
@@ -422,7 +558,7 @@ def handle_text(message):
         return
 
     if response.intent == "gift":
-        _send_gift_suggestions(message.chat.id, response)
+        _send_gift_suggestions(chat_id, response)
         return
 
     # =========================
@@ -957,7 +1093,7 @@ def handle_text(message):
     )
 
     send_long_message(
-        message.chat.id,
+        chat_id,
         final_message,
     )
 
@@ -1072,6 +1208,8 @@ if __name__ == "__main__":
     print(
         "🧠 SAVVY SENSE is starting..."
     )
+
+    start_webapp_server()
 
     bot.infinity_polling(
         skip_pending=True,

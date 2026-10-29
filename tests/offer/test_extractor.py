@@ -1,22 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from offer.extractor import OfferExtractor
 
 
-def _response(
-    html: str,
-    url: str = "https://example.com/product",
-):
-    response = Mock()
-
-    response.text = html
-    response.url = url
-
-    response.raise_for_status.return_value = None
-
-    return response
+def _response(html: str, url: str = "https://example.com/product"):
+    return url, html
 
 
 def test_extract_product_from_json_ld():
@@ -59,7 +49,7 @@ def test_extract_product_from_json_ld():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -128,7 +118,7 @@ def test_extract_refurbished_condition():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -174,7 +164,7 @@ def test_extract_out_of_stock():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -219,7 +209,7 @@ def test_extract_meta_price_when_json_ld_has_no_price():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -258,7 +248,7 @@ def test_unknown_price_is_not_zero():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -297,7 +287,7 @@ def test_fallback_is_used_when_request_fails():
     }
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.side_effect = Exception(
@@ -363,7 +353,7 @@ def test_meta_currency_is_normalized_to_uppercase():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -411,7 +401,7 @@ def test_product_attributes_are_extracted():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
@@ -453,7 +443,7 @@ def test_final_url_and_domain_are_preserved():
     extractor = OfferExtractor()
 
     with patch(
-        "offer.extractor.requests.get"
+        "offer.extractor.fetch_public_html"
     ) as mock_get:
 
         mock_get.return_value = _response(
