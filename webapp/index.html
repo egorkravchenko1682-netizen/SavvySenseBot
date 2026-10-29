@@ -13,40 +13,43 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="SAVVY — главная"><span class="brand-mark" aria-hidden="true">s.</span><span>SAVVY</span></a>
-        <span class="beta-pill"><span class="status-dot"></span> ранний доступ</span>
+        <a class="brand" id="brand-home" href="/" aria-label="SAVVY — главная"><span class="brand-mark" aria-hidden="true">s.</span><span>SAVVY</span></a>
+        <div class="topbar-actions">
+          <label class="language-picker" for="language" aria-label="Выбрать язык"><span aria-hidden="true">🌐</span><select id="language" name="language"><option value="ru">РУС</option><option value="en">ENG</option><option value="be">БЕЛ</option></select><span aria-hidden="true">⌄</span></label>
+          <span class="beta-pill"><span class="status-dot"></span><span data-i18n="beta">ранний доступ</span></span>
+        </div>
       </header>
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow"><span class="sparkle" aria-hidden="true">✳</span> ПОИСК ПЕРЕД ПОКУПКОЙ</p>
-          <h1 id="hero-title">Сравни,<br />прежде чем <span>купить.</span></h1>
-          <p class="hero-description">Укажи товар и страну доставки. SAVVY поищет предложения в нескольких регионах.</p>
+          <p class="eyebrow"><span class="sparkle" aria-hidden="true">✳</span> <span data-i18n="heroEyebrow">ПОИСК ПЕРЕД ПОКУПКОЙ</span></p>
+          <h1 id="hero-title" data-i18n="heroTitle">Сравни, прежде чем купить.</h1>
+          <p class="hero-description" data-i18n="heroDescription">Укажи товар и страну доставки. SAVVY поищет предложения в нескольких регионах.</p>
         </div>
         <div class="hero-illustration" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="check-card"><span class="check-card-label">ПОИСК ВАРИАНТОВ</span><span class="check-card-icon">✓</span><span class="check-card-line line-long"></span><span class="check-card-line line-short"></span></div><span class="floating-star star-one">✳</span><span class="floating-star star-two">✦</span></div>
       </section>
       <section class="check-section" aria-labelledby="check-title">
-        <div class="section-heading"><div><p class="eyebrow">ВАША СЛЕДУЮЩАЯ ПОКУПКА</p><h2 id="check-title">Что хотите найти?</h2></div><span class="step-count">01 <span>/ 01</span></span></div>
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="sectionEyebrow">ВАША СЛЕДУЮЩАЯ ПОКУПКА</p><h2 id="check-title" data-i18n="formTitle">Что хотите найти?</h2></div><span class="step-count">01 <span>/ 01</span></span></div>
         <form id="offer-form" novalidate>
-          <label class="field-label" for="offer-url">Название товара</label>
-          <div class="url-field" id="url-field"><span class="link-icon" aria-hidden="true">⌕</span><input id="offer-url" name="query" type="text" autocomplete="off" placeholder="Например, футболка Nike Air Max" maxlength="300" /><button class="paste-button" id="paste-button" type="button" aria-label="Вставить текст из буфера обмена">Вставить</button></div>
-          <p class="field-hint" id="url-hint">Напиши модель и важные детали — покажем лучший найденный вариант.</p>
-          <label class="field-label region-label" for="region">Куда доставлять?</label>
-          <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY">Беларусь</option><option value="RU">Россия</option><option value="KZ">Казахстан</option><option value="UZ">Узбекистан</option><option value="KG">Кыргызстан</option><option value="AM">Армения</option><option value="AZ">Азербайджан</option><option value="MD">Молдова</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
-          <button class="primary-button" type="submit"><span>Найти лучший вариант</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <label class="field-label" for="offer-url" data-i18n="productName">Название товара</label>
+          <div class="url-field" id="url-field"><span class="link-icon" aria-hidden="true">⌕</span><input id="offer-url" name="query" type="text" autocomplete="off" placeholder="Например, футболка Nike Air Max" maxlength="300" /><button class="paste-button" id="paste-button" type="button" aria-label="Вставить текст из буфера обмена" data-i18n="paste">Вставить</button></div>
+          <p class="field-hint" id="url-hint" data-i18n="fieldHint">Напиши модель и важные детали — покажем лучший найденный вариант.</p>
+          <label class="field-label region-label" for="region" data-i18n="shipTo">Куда доставлять?</label>
+          <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY" data-region="BY">Беларусь</option><option value="RU" data-region="RU">Россия</option><option value="KZ" data-region="KZ">Казахстан</option><option value="UZ" data-region="UZ">Узбекистан</option><option value="KG" data-region="KG">Кыргызстан</option><option value="AM" data-region="AM">Армения</option><option value="AZ" data-region="AZ">Азербайджан</option><option value="MD" data-region="MD">Молдова</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
+          <button class="primary-button" type="submit"><span data-i18n="searchButton">Найти лучший вариант</span><span class="button-arrow" aria-hidden="true">↗</span></button>
           <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
         </form>
-        <div class="trust-note"><span class="lock-icon" aria-hidden="true">⌑</span><span>Часть площадок работает нестабильно. Стоимость доставки и пошлин иногда оценивается, а не подтверждается продавцом.</span></div>
-        <p class="privacy-note">Название и выбранная страна отправляются Telegram-боту и поисковым площадкам. Mini App не сохраняет их в базе.</p>
+        <div class="trust-note"><span class="lock-icon" aria-hidden="true">⌑</span><span data-i18n="trustNote">Часть площадок работает нестабильно. Стоимость доставки и пошлин иногда оценивается, а не подтверждается продавцом.</span></div>
+        <p class="privacy-note" data-i18n="privacyNote">Название и выбранная страна отправляются Telegram-боту и поисковым площадкам. Mini App не сохраняет их в базе.</p>
       </section>
       <section class="results-section" id="results" hidden aria-live="polite">
-        <div class="results-heading"><div><p class="eyebrow">РЕЗУЛЬТАТ ПОИСКА</p><h2 id="results-title">Лучший вариант</h2></div><button class="text-button" id="new-search" type="button">Новый поиск</button></div>
+        <div class="results-heading"><div><p class="eyebrow" data-i18n="resultsEyebrow">РЕЗУЛЬТАТ ПОИСКА</p><h2 id="results-title" data-i18n="resultsTitle">Лучший вариант</h2></div><button class="text-button" id="new-search" type="button" data-i18n="newSearch">Новый поиск</button></div>
         <p class="result-status" id="result-status"></p>
         <article class="best-card" id="best-card"></article>
         <button class="secondary-button" id="compare-toggle" type="button" hidden>Показать другие варианты</button>
         <div class="alternatives" id="alternatives" hidden></div>
       </section>
-      <section class="promise-row" aria-label="Что SAVVY будет проверять"><div class="promise-item"><span class="promise-icon price-icon">↓</span><span>Итоговая<br />стоимость</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon seller-icon">✓</span><span>Надёжность<br />продавца</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon match-icon">⌕</span><span>Точное<br />совпадение</span></div></section>
-      <footer class="footer"><span>Покупай осознанно.</span><span class="footer-mark">SAVVY © 2026</span></footer>
+      <section class="promise-row" id="promises" aria-label="Что SAVVY будет проверять"><div class="promise-item"><span class="promise-icon price-icon">↓</span><span data-i18n="promiseCost">Итоговая<br />стоимость</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon seller-icon">✓</span><span data-i18n="promiseSeller">Надёжность<br />продавца</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon match-icon">⌕</span><span data-i18n="promiseMatch">Точное<br />совпадение</span></div></section>
+      <footer class="footer"><span data-i18n="footerSlogan">Покупай осознанно.</span><span class="footer-mark">SAVVY © 2026</span></footer>
     </main>
   </body>
 </html>

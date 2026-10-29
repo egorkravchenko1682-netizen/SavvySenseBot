@@ -366,33 +366,17 @@ def _miniapp_search(user_id, payload):
 
     match = best.get("match") or {}
     exact = best.get("status") == "exact"
-    why = [
-        "Совпадение товара подтверждено по найденным характеристикам." if exact
-        else "Это близкий вариант: SAVVY не смог подтвердить полное совпадение.",
-    ]
     matched = match.get("matched_attributes") if isinstance(match, dict) else None
-    if matched:
-        names = {
-            "brand": "бренд", "model": "модель", "color": "цвет",
-            "size": "размер", "storage": "память", "material": "материал",
-            "category": "категория", "condition": "состояние",
-        }
-        visible = [names.get(str(item).lower(), str(item)) for item in matched[:3]]
-        why.append("Совпали: " + ", ".join(visible) + ".")
-    match_group = "точных совпадений" if exact else "похожих вариантов"
     comparison_source = deal.get("comparison_source")
-    if comparison_source == "real_cost":
-        why.append(f"Минимальная подтверждённая полная стоимость среди найденных {match_group} с ценой.")
-    elif comparison_source == "price":
-        why.append(f"Минимальная цена товара среди найденных {match_group}; доставка могла быть не учтена.")
-    elif comparison_source == "quality":
-        why.append("При одинаковой цене у этого предложения лучше оценка качества по доступным данным.")
-    elif comparison_source == "risk":
-        why.append("При одинаковой стоимости у этого предложения ниже расчётный риск.")
-    else:
-        why.append("Других сравнимых предложений с ценой не найдено.")
-    best_card["why"] = why[:4]
-    best_card["match_type"] = "Точное совпадение" if exact else "Похожий товар"
+    reason_code = {
+        "real_cost": "lowest_total",
+        "price": "lowest_price",
+        "quality": "quality_tiebreak",
+        "risk": "risk_tiebreak",
+    }.get(comparison_source, "only_comparable")
+    best_card["reason_codes"] = ["exact_match" if exact else "similar_match", reason_code]
+    best_card["matched_attributes"] = [str(item)[:40] for item in (matched or [])[:3]]
+    best_card["match_type"] = "exact" if exact else "similar"
 
     return {
         "query": query,
@@ -421,7 +405,7 @@ def _miniapp_offer(offer, data):
         "source": str(offer.get("source") or "Магазин")[:80],
         "seller": str(offer.get("seller"))[:120] if offer.get("seller") else None,
         "region": str(offer.get("region"))[:40] if offer.get("region") else None,
-        "match_type": "Точное совпадение" if offer.get("status") == "exact" else "Похожий товар",
+        "match_type": offer.get("status") if offer.get("status") in {"exact", "similar"} else "similar",
         "currency": offer.get("real_cost_currency") or offer.get("currency") or data.get("currency"),
         "price": price,
         "total": total,
@@ -446,104 +430,7 @@ def _miniapp_offer(offer, data):
     commands=["help"]
 )
 def help_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🧠 SAVVY SENSE\n\n"
-
-        "/start — запустить\n"
-        "/find — найти товар\n"
-        "/compare — сравнить\n"
-        "/check — проверить товар\n"
-        "/cheaper — найти дешевле\n"
-        "/track — отслеживать цену\n"
-        "/help — помощь",
-    )
-
-
-# =========================
-# FIND
-# =========================
-
-@bot.message_handler(
-    commands=["find"]
-)
-def find_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🔎 Напиши, какой товар нужно найти.",
-    )
-
-
-# =========================
-# COMPARE
-# =========================
-
-@bot.message_handler(
-    commands=["compare"]
-)
-def compare_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "⚖️ Отправь товары или ссылки "
-        "для сравнения.",
-    )
-
-
-# =========================
-# CHECK
-# =========================
-
-@bot.message_handler(
-    commands=["check"]
-)
-def check_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "🔎 Отправь ссылку или "
-        "описание товара.",
-    )
-
-
-# =========================
-# CHEAPER
-# =========================
-
-@bot.message_handler(
-    commands=["cheaper"]
-)
-def cheaper_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "💰 Отправь ссылку или "
-        "название товара.",
-    )
-
-
-# =========================
-# TRACK
-# =========================
-
-@bot.message_handler(
-    commands=["track"]
-)
-def track_command(message):
-
-    bot.send_message(
-        message.chat.id,
-
-        "📉 Отправь ссылку на товар "
-        "для отслеживания.",
-    )
+    start_command(message)
 
 
 # =========================
@@ -601,7 +488,7 @@ def handle_photo(message):
 def handle_text(message):
     bot.send_message(
         message.chat.id,
-        "Поиск и результаты SAVVY находятся в приложении. Нажми ✨ SavvyApp в меню чата или отправь /start.",
+        "Поиск и результаты SAVVY находятся в приложении. Нажми ✨ SavvyApp в меню чата.",
     )
 
 
@@ -630,7 +517,7 @@ def _allow_webapp_request(user_id):
 def handle_webapp_data(message):
     bot.send_message(
         message.chat.id,
-        "Для поиска открой актуальную версию Mini App: нажми /start и выбери ✨ SavvyApp.",
+        "Для поиска открой актуальную версию Mini App через кнопку ✨ SavvyApp в меню чата.",
     )
 
 
@@ -1328,6 +1215,13 @@ if __name__ == "__main__":
             )
         except Exception:
             logging.getLogger(__name__).warning("Unable to set Telegram Mini App menu button")
+
+    # Hide legacy slash-command suggestions; every user action lives in SavvyApp.
+    for language_code in (None, "ru", "en", "be"):
+        try:
+            bot.set_my_commands([], language_code=language_code)
+        except Exception:
+            logging.getLogger(__name__).warning("Unable to clear Telegram command suggestions")
 
     configure_api(BOT_TOKEN, _miniapp_search, WEBAPP_URL)
     start_webapp_server()
