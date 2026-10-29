@@ -29,14 +29,21 @@
         <form id="offer-form" novalidate>
           <label class="field-label" for="offer-url">Название товара</label>
           <div class="url-field" id="url-field"><span class="link-icon" aria-hidden="true">⌕</span><input id="offer-url" name="query" type="text" autocomplete="off" placeholder="Например, футболка Nike Air Max" maxlength="300" /><button class="paste-button" id="paste-button" type="button" aria-label="Вставить текст из буфера обмена">Вставить</button></div>
-          <p class="field-hint" id="url-hint">Пока ищем по названию. Проверку конкретной ссылки подключим следующим этапом.</p>
+          <p class="field-hint" id="url-hint">Напиши модель и важные детали — покажем лучший найденный вариант.</p>
           <label class="field-label region-label" for="region">Куда доставлять?</label>
           <div class="select-wrap"><span class="globe-icon" aria-hidden="true">◎</span><select id="region" name="region"><option value="BY">Беларусь</option><option value="RU">Россия</option><option value="KZ">Казахстан</option><option value="UZ">Узбекистан</option><option value="KG">Кыргызстан</option><option value="AM">Армения</option><option value="AZ">Азербайджан</option><option value="MD">Молдова</option></select><span class="select-chevron" aria-hidden="true">⌄</span></div>
-          <button class="primary-button" type="submit"><span>Найти предложения</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <button class="primary-button" type="submit"><span>Найти лучший вариант</span><span class="button-arrow" aria-hidden="true">↗</span></button>
           <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
         </form>
         <div class="trust-note"><span class="lock-icon" aria-hidden="true">⌑</span><span>Часть площадок работает нестабильно. Стоимость доставки и пошлин иногда оценивается, а не подтверждается продавцом.</span></div>
         <p class="privacy-note">Название и выбранная страна отправляются Telegram-боту и поисковым площадкам. Mini App не сохраняет их в базе.</p>
+      </section>
+      <section class="results-section" id="results" hidden aria-live="polite">
+        <div class="results-heading"><div><p class="eyebrow">РЕЗУЛЬТАТ ПОИСКА</p><h2 id="results-title">Лучший вариант</h2></div><button class="text-button" id="new-search" type="button">Новый поиск</button></div>
+        <p class="result-status" id="result-status"></p>
+        <article class="best-card" id="best-card"></article>
+        <button class="secondary-button" id="compare-toggle" type="button" hidden>Показать другие варианты</button>
+        <div class="alternatives" id="alternatives" hidden></div>
       </section>
       <section class="promise-row" aria-label="Что SAVVY будет проверять"><div class="promise-item"><span class="promise-icon price-icon">↓</span><span>Итоговая<br />стоимость</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon seller-icon">✓</span><span>Надёжность<br />продавца</span></div><div class="promise-divider"></div><div class="promise-item"><span class="promise-icon match-icon">⌕</span><span>Точное<br />совпадение</span></div></section>
       <footer class="footer"><span>Покупай осознанно.</span><span class="footer-mark">SAVVY © 2026</span></footer>
